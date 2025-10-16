@@ -85,8 +85,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     whatsAppService.on('qr-code', (data) => {
       console.log('🎯 ROUTES: Received qr-code event from WhatsApp service');
-      console.log('🎯 Broadcasting QR code to WebSocket clients:', data);
+      console.log('🎯 QR Data received:', data);
+      console.log('🎯 WebSocket clients count:', wss.clients.size);
+      console.log('🎯 Broadcasting QR code to WebSocket clients...');
       broadcast('qr-code', data);
+      console.log('🎯 QR code broadcast completed');
     });
 
     whatsAppService.on('whatsapp-status', (data) => {
@@ -267,22 +270,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate QR code for WhatsApp connection
-  app.post('/api/generate-qr', async (req, res) => {
+  // Generate QR code endpoint
+  app.post('/api/generate-qr', async (req: Request, res: Response) => {
     try {
-      // Re-setup event listeners before generating QR
-      setupWhatsAppEventListeners();
-      
+      log('Generate QR code request received');
       await whatsAppService.generateQRCode();
-      res.json({ 
-        success: true, 
-        message: 'QR code generation initiated. Listen for qr-code events via WebSocket.' 
-      });
-    } catch (error) {
+      res.json({ success: true, message: 'QR code generation started' });
+    } catch (error: any) {
       log(`Generate QR error: ${error.message}`);
-      res.status(400).json({ 
-        success: false, 
-        error: error.message || 'Failed to generate QR code' 
+      res.status(400).json({
+        success: false,
+        error: error.message || 'Failed to generate QR code'
+      });
+    }
+  });
+
+  // Get current QR code endpoint (fallback for when WebSocket fails)
+  app.get('/api/qr-code', (req: Request, res: Response) => {
+    try {
+      // Return the last generated QR code
+      const currentQR = whatsAppService.getCurrentQR();
+      if (currentQR) {
+        res.json({ 
+          success: true, 
+          data: { 
+            qr: currentQR.qr, 
+            generated: currentQR.timestamp,
+            message: 'QR code available for scanning'
+          } 
+        });
+      } else {
+        res.json({ 
+          success: false, 
+          message: 'No QR code available. WhatsApp service initializing...' 
+        });
+      }
+    } catch (error: any) {
+      log(`Get QR error: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to get QR code'
       });
     }
   });

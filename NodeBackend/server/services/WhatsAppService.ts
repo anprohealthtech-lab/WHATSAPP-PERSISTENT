@@ -21,6 +21,7 @@ export class WhatsAppService extends EventEmitter {
     sessionInfo: null,
   };
   private sessionPath: string;
+  private currentQR: { qr: string; timestamp: Date } | null = null;
 
   constructor() {
     super();
@@ -197,6 +198,9 @@ export class WhatsAppService extends EventEmitter {
       
       console.log('QR Code URL generated for frontend:', qrCodeUrl.substring(0, 100) + '...');
       console.log('🚀 EMITTING QR-CODE EVENT TO WEBSOCKET!');
+      
+      // Store current QR for HTTP fallback
+      this.currentQR = { qr: qrCodeUrl, timestamp: new Date() };
       
       // Emit the QR code event
       const qrData = { qr: qrCodeUrl, rawQR: qr };
@@ -377,6 +381,10 @@ export class WhatsAppService extends EventEmitter {
 
   getStatus(): WhatsAppStatus {
     return { ...this.status };
+  }
+
+  getCurrentQR(): { qr: string; timestamp: Date } | null {
+    return this.currentQR;
   }
 
   async disconnect(): Promise<void> {
