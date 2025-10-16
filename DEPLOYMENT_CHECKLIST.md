@@ -33,11 +33,12 @@
 - [ ] .do/app.yaml configured
 
 # Deploy steps
-1. [ ] Run: chmod +x deploy-do-app.sh
-2. [ ] Run: ./deploy-do-app.sh
-3. [ ] Set environment variables in DO dashboard
-4. [ ] Configure custom domain (optional)
-5. [ ] Test application endpoints
+1. [ ] Ensure GitHub repository access permissions
+2. [ ] Run: chmod +x deploy-do-app.sh
+3. [ ] Run: ./deploy-do-app.sh
+4. [ ] Set environment variables in DO dashboard
+5. [ ] Configure custom domain (optional)
+6. [ ] Test application endpoints
 ```
 
 ### Option B: DigitalOcean Droplet with Docker
