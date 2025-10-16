@@ -37,14 +37,16 @@ export class WhatsAppService extends EventEmitter {
       // Force real WhatsApp mode - no demo mode
       console.log('Initializing real WhatsApp Web integration...');
 
+      // Clean up any existing Chrome processes and sessions first
+      await this.cleanup();
+
       // Check for Chrome executable
       const fs = await import('fs');
       const chromePaths = [
-        '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
+        '/usr/bin/chromium',
         '/usr/bin/chromium-browser',
         '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable', 
-        '/usr/bin/chromium',
+        '/usr/bin/google-chrome-stable',
         '/snap/bin/chromium'
       ];
       
@@ -58,25 +60,39 @@ export class WhatsAppService extends EventEmitter {
       
       console.log(`Using Chrome at: ${availableChrome}`);
 
+      // Create unique session ID to avoid conflicts
+      const uniqueClientId = `whatsapp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const uniqueSessionPath = path.join(this.sessionPath, uniqueClientId);
+      
+      // Ensure unique session directory exists
+      if (!fs.existsSync(uniqueSessionPath)) {
+        fs.mkdirSync(uniqueSessionPath, { recursive: true });
+      }
+
       this.client = new Client({
         authStrategy: new LocalAuth({
-          clientId: process.env.WHATSAPP_CLIENT_ID || 'default-client',
-          dataPath: this.sessionPath,
+          clientId: uniqueClientId,
+          dataPath: uniqueSessionPath,
         }),
         puppeteer: {
-          headless: true,
+          headless: 'new',
           executablePath: availableChrome,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
             '--disable-gpu',
+            '--disable-extensions',
+            '--no-first-run',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
             '--disable-web-security',
             '--disable-features=VizDisplayCompositor',
-            '--remote-debugging-port=9222'
+            '--disable-ipc-flooding-protection',
+            `--user-data-dir=${uniqueSessionPath}/chrome-data`,
+            `--profile-directory=${uniqueClientId}`,
+            '--remote-debugging-port=0' // Use random available port
           ],
         },
       });
@@ -85,6 +101,7 @@ export class WhatsAppService extends EventEmitter {
       await this.client.initialize();
       
       this.emit('whatsapp-status', { status: 'initializing' });
+      console.log('WhatsApp client initialized successfully');
     } catch (error: any) {
       console.error('Failed to initialize WhatsApp client:', error);
       console.log('Attempting to force real WhatsApp connection...');
@@ -99,11 +116,10 @@ export class WhatsAppService extends EventEmitter {
         // Find Chrome executable again
         const fs = await import('fs');
         const chromePaths = [
-          '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
+          '/usr/bin/chromium',
+          '/usr/bin/chromium-browser',
           '/usr/bin/google-chrome',
           '/usr/bin/google-chrome-stable',
-          '/usr/bin/chromium-browser',
-          '/usr/bin/chromium',
           '/snap/bin/chromium'
         ];
 
@@ -121,10 +137,18 @@ export class WhatsAppService extends EventEmitter {
 
         console.log('Using Chrome at:', chromeExecutable);
         
+        // Create another unique session for retry
+        const retryClientId = `whatsapp-retry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const retrySessionPath = path.join(this.sessionPath, retryClientId);
+        
+        if (!fs.existsSync(retrySessionPath)) {
+          fs.mkdirSync(retrySessionPath, { recursive: true });
+        }
+        
         this.client = new Client({
           authStrategy: new LocalAuth({
-            clientId: `whatsapp-${Date.now()}`, // Use unique client ID
-            dataPath: this.sessionPath,
+            clientId: retryClientId,
+            dataPath: retrySessionPath,
           }),
           puppeteer: {
             headless: 'new',
@@ -139,7 +163,11 @@ export class WhatsAppService extends EventEmitter {
               '--disable-background-timer-throttling',
               '--disable-backgrounding-occluded-windows',
               '--disable-renderer-backgrounding',
-              '--user-data-dir=' + this.sessionPath + '/chrome-data'
+              '--disable-web-security',
+              '--single-process',
+              `--user-data-dir=${retrySessionPath}/chrome-data-retry`,
+              `--profile-directory=${retryClientId}`,
+              '--remote-debugging-port=0'
             ],
           },
         });
@@ -373,31 +401,71 @@ export class WhatsAppService extends EventEmitter {
       this.client = null;
     }
 
-    // Clean up singleton lock files and Chrome data
+    // Clean up Chrome processes and session data
     const fs = await import('fs');
     const path = await import('path');
-    const { spawn } = await import('child_process');
+    const { spawn, execSync } = await import('child_process');
     
     try {
-      // Kill any existing Chrome processes
-      spawn('pkill', ['-9', '-f', 'chromium'], { stdio: 'ignore' });
-      spawn('pkill', ['-9', '-f', 'chrome'], { stdio: 'ignore' });
-      
-      // Remove lock files and Chrome data
-      const lockPaths = [
-        path.join(this.sessionPath, 'session-default-client', 'SingletonLock'),
-        path.join(this.sessionPath, 'chrome-data'),
-        '/tmp/.org.chromium.Chromium'
+      // Kill any existing Chrome processes more aggressively
+      const killCommands = [
+        'pkill -9 -f "chromium.*whatsapp"',
+        'pkill -9 -f "chrome.*whatsapp"',
+        'pkill -9 -f chromium',
+        'pkill -9 -f chrome'
       ];
       
-      for (const lockPath of lockPaths) {
-        if (fs.existsSync(lockPath)) {
-          if (fs.statSync(lockPath).isDirectory()) {
-            fs.rmSync(lockPath, { recursive: true, force: true });
-          } else {
-            fs.unlinkSync(lockPath);
+      for (const cmd of killCommands) {
+        try {
+          execSync(cmd, { stdio: 'ignore', timeout: 5000 });
+        } catch (error) {
+          // Ignore errors - process might not exist
+        }
+      }
+      
+      // Clean up all session directories to avoid conflicts
+      if (fs.existsSync(this.sessionPath)) {
+        const sessionDirs = fs.readdirSync(this.sessionPath);
+        for (const dir of sessionDirs) {
+          const sessionDir = path.join(this.sessionPath, dir);
+          if (fs.statSync(sessionDir).isDirectory()) {
+            try {
+              // Remove SingletonLock files specifically
+              const lockFile = path.join(sessionDir, 'SingletonLock');
+              if (fs.existsSync(lockFile)) {
+                fs.unlinkSync(lockFile);
+                console.log('Removed SingletonLock from:', sessionDir);
+              }
+              
+              // Remove chrome-data directories
+              const chromeDataDirs = ['chrome-data', 'chrome-data-retry'];
+              for (const chromeDir of chromeDataDirs) {
+                const chromePath = path.join(sessionDir, chromeDir);
+                if (fs.existsSync(chromePath)) {
+                  fs.rmSync(chromePath, { recursive: true, force: true });
+                  console.log('Removed chrome data:', chromePath);
+                }
+              }
+            } catch (error) {
+              console.log('Could not clean session directory:', sessionDir, error);
+            }
           }
-          console.log('Removed:', lockPath);
+        }
+      }
+      
+      // Clean up system temp files
+      const tempPaths = [
+        '/tmp/.org.chromium.Chromium',
+        '/tmp/.org.chrome.Chrome',
+        '/tmp/chrome-*',
+        '/tmp/chromium-*'
+      ];
+      
+      for (const tempPath of tempPaths) {
+        try {
+          execSync(`rm -rf ${tempPath}`, { stdio: 'ignore', timeout: 5000 });
+        } catch (error) {
+          // Ignore errors
         }
       }
     } catch (error) {
@@ -412,8 +480,8 @@ export class WhatsAppService extends EventEmitter {
       sessionInfo: null,
     };
     
-    // Wait a moment for cleanup to complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   private formatPhoneNumber(phoneNumber: string): string {
