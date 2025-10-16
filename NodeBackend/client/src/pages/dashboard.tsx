@@ -72,13 +72,13 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { isConnected, whatsappStatus, qrCode } = useSocket();
 
-  // Auto-show QR modal when QR code is available or when WhatsApp is disconnected
+  // Auto-show QR modal when WhatsApp is not connected 
   useEffect(() => {
-    if ((qrCode && !whatsappStatus.isConnected) || (!whatsappStatus.isConnected && !qrCode)) {
+    if (!whatsappStatus.isConnected && !whatsappStatus.isAuthenticated) {
       setShowQRModal(true);
-      console.log('🎯 Showing QR modal - WhatsApp not connected, QR available or fallback needed');
+      console.log('🎯 WhatsApp not connected - showing QR modal to initiate connection');
     }
-  }, [qrCode, whatsappStatus.isConnected]);
+  }, [whatsappStatus.isConnected, whatsappStatus.isAuthenticated]);
 
   // Auto-hide QR modal when WhatsApp connects
   useEffect(() => {
@@ -800,17 +800,9 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="text-center">
-                  {/* Show demo QR code when WebSocket QR isn't available */}
-                  <img 
-                    src="https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=DEMO-WHATSAPP-LIMS-SYSTEM-CONNECT-YOUR-PHONE"
-                    alt="Demo WhatsApp QR Code" 
-                    className="w-full h-full object-contain rounded-lg"
-                    onError={(e) => {
-                      // Fallback to icon if QR service fails
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                  <p className="text-sm text-blue-600 mt-2">Demo QR Code - Try scanning!</p>
+                  <QrCode className="w-16 h-16 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Generating WhatsApp QR code...</p>
+                  <p className="text-xs text-gray-400 mt-1">This may take a few seconds</p>
                 </div>
               )}
             </div>

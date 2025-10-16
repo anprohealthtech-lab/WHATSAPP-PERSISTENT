@@ -35,31 +35,37 @@ export class WhatsAppService extends EventEmitter {
 
   async initialize(): Promise<void> {
     try {
-      // Force real WhatsApp mode - no demo mode
-      console.log('Initializing real WhatsApp Web integration...');
+      console.log('🚀 Starting REAL WhatsApp Web integration - no demo mode');
 
       // Clean up any existing Chrome processes and sessions first
       await this.cleanup();
 
-      // Check for Chrome executable
+      // Check for Chrome executable with environment variable first
       const fs = await import('fs');
       const chromePaths = [
+        process.env.PUPPETEER_EXECUTABLE_PATH, // From DigitalOcean env var
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
         '/usr/bin/chromium',
         '/usr/bin/chromium-browser',
-        '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable',
         '/snap/bin/chromium'
-      ];
+      ].filter(Boolean); // Remove undefined values
       
-      const availableChrome = chromePaths.find(path => fs.existsSync(path));
-      if (!availableChrome) {
-        console.log('Chrome not found, running in demo mode');
-        process.env.DEMO_MODE = 'true';
-        this.emit('whatsapp-status', { status: 'demo-mode' });
-        return;
+      let availableChrome = '';
+      for (const path of chromePaths) {
+        if (path && fs.existsSync(path)) {
+          availableChrome = path;
+          break;
+        }
       }
       
-      console.log(`Using Chrome at: ${availableChrome}`);
+      if (!availableChrome) {
+        console.error('❌ Chrome not found in any of these paths:', chromePaths);
+        console.error('❌ Cannot initialize real WhatsApp - Chrome required');
+        throw new Error('Chrome executable not found for WhatsApp initialization');
+      }
+      
+      console.log(`✅ Using Chrome at: ${availableChrome}`);
 
       // Create unique session ID to avoid conflicts
       const uniqueClientId = `whatsapp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
