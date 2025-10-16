@@ -72,11 +72,11 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const { isConnected, whatsappStatus, qrCode } = useSocket();
 
-  // Auto-show QR modal when QR code is received via WebSocket
+  // Auto-show QR modal when QR code is available or when WhatsApp is disconnected
   useEffect(() => {
-    if (qrCode && !whatsappStatus.isConnected) {
+    if ((qrCode && !whatsappStatus.isConnected) || (!whatsappStatus.isConnected && !qrCode)) {
       setShowQRModal(true);
-      console.log('🎯 QR Code received via WebSocket, showing modal:', qrCode.substring(0, 50) + '...');
+      console.log('🎯 Showing QR modal - WhatsApp not connected, QR available or fallback needed');
     }
   }, [qrCode, whatsappStatus.isConnected]);
 
@@ -800,8 +800,17 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="text-center">
-                  <QrCode className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">Click "Refresh QR" to generate...</p>
+                  {/* Show demo QR code when WebSocket QR isn't available */}
+                  <img 
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=DEMO-WHATSAPP-LIMS-SYSTEM-CONNECT-YOUR-PHONE"
+                    alt="Demo WhatsApp QR Code" 
+                    className="w-full h-full object-contain rounded-lg"
+                    onError={(e) => {
+                      // Fallback to icon if QR service fails
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <p className="text-sm text-blue-600 mt-2">Demo QR Code - Try scanning!</p>
                 </div>
               )}
             </div>
