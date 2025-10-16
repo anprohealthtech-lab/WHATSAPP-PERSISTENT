@@ -285,6 +285,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // WhatsApp API endpoints
+  app.get('/api/whatsapp/status', async (req, res) => {
+    try {
+      const status = whatsAppService.getStatus();
+      res.json({ 
+        success: true, 
+        data: status
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`WhatsApp status error: ${errorMessage}`);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to get WhatsApp status' 
+      });
+    }
+  });
+
+  app.post('/api/whatsapp/connect', async (req, res) => {
+    try {
+      // Re-setup event listeners before connecting
+      setupWhatsAppEventListeners();
+      
+      const result = await whatsAppService.initialize();
+      res.json({ 
+        success: true, 
+        message: 'WhatsApp connection initiated'
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`WhatsApp connect error: ${errorMessage}`);
+      res.status(400).json({ 
+        success: false, 
+        error: errorMessage || 'Failed to connect to WhatsApp' 
+      });
+    }
+  });
+
+  app.post('/api/whatsapp/disconnect', async (req, res) => {
+    try {
+      await whatsAppService.disconnect();
+      res.json({ 
+        success: true, 
+        message: 'WhatsApp disconnected successfully'
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`WhatsApp disconnect error: ${errorMessage}`);
+      res.status(400).json({ 
+        success: false, 
+        error: errorMessage || 'Failed to disconnect from WhatsApp' 
+      });
+    }
+  });
+
+  app.get('/api/whatsapp/qr', async (req, res) => {
+    try {
+      // For now, return a placeholder since qrCode isn't in the status type
+      // The QR code will be handled via WebSocket events
+      res.json({ 
+        success: false, 
+        error: 'QR code available via WebSocket events only. Use /api/generate-qr endpoint.' 
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`WhatsApp QR error: ${errorMessage}`);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to get QR code' 
+      });
+    }
+  });
+
   // Resend failed message
   app.post('/api/messages/:id/resend', async (req, res) => {
     try {
@@ -293,10 +366,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true, message });
     } catch (error) {
-      log(`Resend message error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Resend message error: ${errorMessage}`);
       res.status(400).json({ 
         success: false, 
-        error: error.message || 'Failed to resend message' 
+        error: errorMessage || 'Failed to resend message' 
       });
     }
   });
@@ -312,7 +386,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true, data: logs });
     } catch (error) {
-      log(`Get logs error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get logs error: ${errorMessage}`);
       res.status(500).json({ 
         success: false, 
         error: 'Failed to get system logs' 
