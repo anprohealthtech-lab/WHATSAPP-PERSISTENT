@@ -6,17 +6,14 @@ name: whatsapp-lims-app
 
 services:
 - name: whatsapp-lims-api
-  source_dir: /
+  source_dir: /NodeBackend
   github:
     repo: anprohealthtech-lab/WHATSAPP-PERSISTENT
-    branch: main
+    branch: master
   build_command: |
-    cd NodeBackend
     npm ci
     npm run build
-  run_command: |
-    cd NodeBackend
-    npm start
+  run_command: npm start
   environment_slug: node-js
   instance_count: 1
   instance_size_slug: basic-s  # 512MB RAM, 0.5 vCPU - minimum for Chrome

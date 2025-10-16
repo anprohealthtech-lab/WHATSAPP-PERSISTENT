@@ -1,46 +1,58 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
-class PersistentFileService {
-    private storagePath: string;
+export class PersistentFileService {
+  private uploadDir: string;
 
-    constructor() {
-        this.storagePath = path.join(__dirname, '../../uploads');
-        this.ensureStoragePath();
+  constructor() {
+    // Use environment variable for upload directory (for deployment persistence)
+    this.uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+    this.ensureUploadDirectory();
+  }
+
+  private async ensureUploadDirectory(): Promise<void> {
+    try {
+      await fs.access(this.uploadDir);
+    } catch {
+      await fs.mkdir(this.uploadDir, { recursive: true });
     }
+  }
 
-    private ensureStoragePath() {
-        if (!fs.existsSync(this.storagePath)) {
-            fs.mkdirSync(this.storagePath, { recursive: true });
-        }
-    }
+  async saveFile(file: Express.Multer.File): Promise<{ fileUrl: string; fileName: string; fileSize: number }> {
+    await this.ensureUploadDirectory();
+    
+    const fileExtension = path.extname(file.originalname || '');
+    const fileName = `${randomUUID()}${fileExtension}`;
+    const filePath = path.join(this.uploadDir, fileName);
+    
+    await fs.writeFile(filePath, file.buffer);
+    
+    return {
+      fileUrl: `/uploads/${fileName}`,
+      fileName,
+      fileSize: file.size
+    };
+  }
 
-    public saveFile(fileName: string, data: Buffer): string {
-        const filePath = path.join(this.storagePath, fileName);
-        fs.writeFileSync(filePath, data);
-        return filePath;
+  async deleteFile(fileName: string): Promise<void> {
+    const filePath = path.join(this.uploadDir, fileName);
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      console.warn(`Failed to delete file ${fileName}:`, error);
     }
+  }
 
-    public getFile(fileName: string): Buffer | null {
-        const filePath = path.join(this.storagePath, fileName);
-        if (fs.existsSync(filePath)) {
-            return fs.readFileSync(filePath);
-        }
-        return null;
+  async getFileStats(fileName: string): Promise<{ exists: boolean; size?: number }> {
+    const filePath = path.join(this.uploadDir, fileName);
+    try {
+      const stats = await fs.stat(filePath);
+      return { exists: true, size: stats.size };
+    } catch {
+      return { exists: false };
     }
-
-    public deleteFile(fileName: string): boolean {
-        const filePath = path.join(this.storagePath, fileName);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            return true;
-        }
-        return false;
-    }
-
-    public listFiles(): string[] {
-        return fs.readdirSync(this.storagePath);
-    }
+  }
 }
 
-export default PersistentFileService;
+export const persistentFileService = new PersistentFileService();

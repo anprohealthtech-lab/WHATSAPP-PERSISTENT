@@ -1,69 +1,67 @@
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import { WhatsAppService } from './services/WhatsAppService';
-import { MessageService } from './services/MessageService';
-import { FileService } from './services/FileService';
-import { PersistentFileService } from './services/PersistentFileService';
-import cors from 'cors';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
-const whatsAppService = new WhatsAppService();
-const messageService = new MessageService();
-const fileService = new FileService();
-const persistentFileService = new PersistentFileService();
-
-app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static('uploads'));
-app.use('/sessions', express.static('sessions'));
+app.use(express.urlencoded({ extended: false }));
 
-// Initialize WhatsApp service
-whatsAppService.initialize().catch(error => {
-  console.error('Failed to initialize WhatsApp service:', error);
-});
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path = req.path;
+  let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
-// WebSocket connection
-io.on('connection', (socket) => {
-  console.log('New client connected');
+  const originalResJson = res.json;
+  res.json = function (bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected');
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path.startsWith("/api")) {
+      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "…";
+      }
+
+      log(logLine);
+    }
   });
 
-  // Additional socket event handlers can be added here
+  next();
 });
 
-// Define API routes
-app.post('/api/send-message', async (req, res) => {
-  try {
-    const { message } = req.body;
-    const result = await messageService.sendMessage(message);
-    res.json({ success: true, data: result, message: "Message sent successfully" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error sending message", error: error.message });
+(async () => {
+  const server = await registerRoutes(app);
+
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+
+    res.status(status).json({ message });
+    throw err;
+  });
+
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
   }
-});
 
-app.post('/api/send-report', async (req, res) => {
-  try {
-    const file = req.file; // Assuming file is uploaded using multer
-    const result = await fileService.handleFileUpload(file);
-    res.json({ success: true, data: result, message: "Report sent successfully" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Error sending report", error: error.message });
-  }
-});
-
-// Start the server
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+  // ALWAYS serve the app on the port specified in the environment variable PORT
+  // Other ports are firewalled. Default to 5000 if not specified.
+  // this serves both the API and the client.
+  // It is the only port that is not firewalled.
+  const port = parseInt(process.env.PORT || '5000', 10);
+  server.listen(port, () => {
+    log(`serving on port ${port}`);
+  });
+})();
