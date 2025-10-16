@@ -185,6 +185,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Health check endpoint for DigitalOcean
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ 
+      success: true, 
+      message: 'Server is running',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  });
+
   // Get system status
   app.get('/api/status', async (req, res) => {
     try {
