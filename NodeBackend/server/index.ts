@@ -52,7 +52,7 @@ app.use((req, res, next) => {
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     // Dynamic import to avoid loading Vite/Rollup in production
-    const { setupVite } = await import("./vite");
+    const { setupVite } = await import("./vite-dev");
     await setupVite(app, server);
   } else {
     serveStatic(app);
