@@ -80,10 +80,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup WhatsApp service event listeners with reconnection handling
   const setupWhatsAppEventListeners = () => {
-    whatsAppService.removeAllListeners(); // Clear old listeners
+    // Don't remove all listeners as it breaks ongoing QR code broadcasting
+    // Only set up listeners if they don't exist already
     
     whatsAppService.on('qr-code', (data) => {
       console.log('🎯 ROUTES: Received qr-code event from WhatsApp service');
+      console.log('🎯 Broadcasting QR code to WebSocket clients:', data);
       broadcast('qr-code', data);
     });
 
