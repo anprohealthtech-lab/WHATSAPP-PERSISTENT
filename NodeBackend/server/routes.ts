@@ -9,7 +9,7 @@ import { messageService } from "./services/MessageService";
 import { fileService } from "./services/FileService";
 import { persistentFileService } from "./services/PersistentFileService";
 import { sendMessageSchema, sendReportSchema } from "@shared/schema";
-import { log } from "./vite";
+import { log } from "./utils";
 
 // Configure CORS
 const corsOptions = {
