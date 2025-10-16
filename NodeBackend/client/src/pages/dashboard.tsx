@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -71,6 +71,22 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isConnected, whatsappStatus, qrCode } = useSocket();
+
+  // Auto-show QR modal when QR code is received via WebSocket
+  useEffect(() => {
+    if (qrCode && !whatsappStatus.isConnected) {
+      setShowQRModal(true);
+      console.log('🎯 QR Code received via WebSocket, showing modal:', qrCode.substring(0, 50) + '...');
+    }
+  }, [qrCode, whatsappStatus.isConnected]);
+
+  // Auto-hide QR modal when WhatsApp connects
+  useEffect(() => {
+    if (whatsappStatus.isConnected) {
+      setShowQRModal(false);
+      console.log('🎯 WhatsApp connected, hiding QR modal');
+    }
+  }, [whatsappStatus.isConnected]);
 
   // Form setup
   const messageForm = useForm<MessageFormData>({
