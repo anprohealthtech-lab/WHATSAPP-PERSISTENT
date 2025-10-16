@@ -57,14 +57,19 @@ class WhatsAppService {
 
   async getQRCode(): Promise<{ success: boolean; qrCode?: string; error?: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/whatsapp/qr`);
+      const response = await fetch(`${this.baseUrl}/generate-qr`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await response.json();
       return data;
     } catch (error) {
-      console.error('Failed to get QR code:', error);
+      console.error('Failed to generate QR code:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to get QR code'
+        error: error instanceof Error ? error.message : 'Failed to generate QR code'
       };
     }
   }
