@@ -11,7 +11,7 @@ services:
     repo: anprohealthtech-lab/WHATSAPP-PERSISTENT
     branch: master
   build_command: |
-    npm ci
+    npm install
     npm run build
   run_command: npm start
   environment_slug: node-js
