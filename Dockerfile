@@ -25,7 +25,9 @@ WORKDIR /app
 
 # Copy package files first for better caching
 COPY NodeBackend/package*.json ./
-RUN npm ci --only=production
+
+# Install ALL dependencies first (including devDependencies for build)
+RUN npm ci
 
 # Copy application code
 COPY NodeBackend/ ./
@@ -34,11 +36,14 @@ COPY shared/ ./shared/
 # Create necessary directories for persistent data
 RUN mkdir -p server/sessions uploads
 
+# Build the application (needs devDependencies like vite, esbuild)
+RUN npm run build
+
+# Now remove devDependencies to keep production image lean
+RUN npm ci --only=production && npm cache clean --force
+
 # Set permissions
 RUN chown -R node:node /app
-
-# Build the application
-RUN npm run build
 
 # Switch to non-root user
 USER node
