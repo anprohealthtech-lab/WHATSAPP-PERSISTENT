@@ -40,21 +40,34 @@ export class WhatsAppService extends EventEmitter {
       // Clean up any existing Chrome processes and sessions first
       await this.cleanup();
 
-      // Check for Chrome executable
+      // Check for Chrome executable with more paths
       const fs = await import('fs');
       const chromePaths = [
+        process.env.PUPPETEER_EXECUTABLE_PATH, // From DigitalOcean env var
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
         '/usr/bin/chromium',
         '/usr/bin/chromium-browser',
-        '/usr/bin/google-chrome',
-        '/usr/bin/google-chrome-stable',
-        '/snap/bin/chromium'
-      ];
+        '/snap/bin/chromium',
+        '/opt/google/chrome/chrome', // Alternative path
+        '/usr/local/bin/chromium',
+        '/usr/local/bin/google-chrome'
+      ].filter(Boolean); // Remove undefined/null values
       
-      const availableChrome = chromePaths.find(path => fs.existsSync(path));
+      const availableChrome = chromePaths.find((path): path is string => {
+        if (!path) return false;
+        try {
+          return fs.existsSync(path);
+        } catch (error) {
+          return false;
+        }
+      });
+      
       if (!availableChrome) {
-        console.log('Chrome not found, running in demo mode');
+        console.log('Chrome not found in any of these paths:', chromePaths);
+        console.log('Available Chrome executables check failed - running in demo mode');
         process.env.DEMO_MODE = 'true';
-        this.emit('whatsapp-status', { status: 'demo-mode' });
+        this.emit('whatsapp-status', { status: 'demo-mode', reason: 'chrome-not-found' });
         return;
       }
       
