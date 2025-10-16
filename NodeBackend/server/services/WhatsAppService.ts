@@ -40,34 +40,21 @@ export class WhatsAppService extends EventEmitter {
       // Clean up any existing Chrome processes and sessions first
       await this.cleanup();
 
-      // Check for Chrome executable with more paths
+      // Check for Chrome executable
       const fs = await import('fs');
       const chromePaths = [
-        process.env.PUPPETEER_EXECUTABLE_PATH, // From DigitalOcean env var
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/google-chrome',
         '/usr/bin/chromium',
         '/usr/bin/chromium-browser',
-        '/snap/bin/chromium',
-        '/opt/google/chrome/chrome', // Alternative path
-        '/usr/local/bin/chromium',
-        '/usr/local/bin/google-chrome'
-      ].filter(Boolean); // Remove undefined/null values
+        '/usr/bin/google-chrome',
+        '/usr/bin/google-chrome-stable',
+        '/snap/bin/chromium'
+      ];
       
-      const availableChrome = chromePaths.find((path): path is string => {
-        if (!path) return false;
-        try {
-          return fs.existsSync(path);
-        } catch (error) {
-          return false;
-        }
-      });
-      
+      const availableChrome = chromePaths.find(path => fs.existsSync(path));
       if (!availableChrome) {
-        console.log('Chrome not found in any of these paths:', chromePaths);
-        console.log('Available Chrome executables check failed - running in demo mode');
+        console.log('Chrome not found, running in demo mode');
         process.env.DEMO_MODE = 'true';
-        this.emit('whatsapp-status', { status: 'demo-mode', reason: 'chrome-not-found' });
+        this.emit('whatsapp-status', { status: 'demo-mode' });
         return;
       }
       
@@ -345,26 +332,7 @@ export class WhatsAppService extends EventEmitter {
       throw new Error('WhatsApp is already connected');
     }
 
-    console.log('🎯 QR code generation requested - checking client state...');
-    
-    // If client is already initializing, just wait for existing QR code
-    if (this.client) {
-      console.log('⏳ Client already exists, waiting for QR code from existing initialization...');
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('QR code generation timeout'));
-        }, 15000); // 15 second timeout
-
-        // Wait for existing initialization to emit QR code
-        this.once('qr-received', () => {
-          clearTimeout(timeout);
-          console.log('✅ QR code received from existing initialization');
-          resolve();
-        });
-      });
-    }
-
-    console.log('🚀 No client exists, triggering fresh initialization...');
+    console.log('Generating fresh WhatsApp QR code...');
     
     // Create a promise that resolves when QR code is received
     return new Promise((resolve, reject) => {
@@ -375,16 +343,30 @@ export class WhatsAppService extends EventEmitter {
       // Set up one-time QR code listener
       const qrHandler = (qr: string) => {
         clearTimeout(timeout);
-        console.log('✅ QR code received from fresh initialization');
+        console.log('QR Code received, scan please!');
+        const qrcode = require('qrcode-terminal');
+        qrcode.generate(qr, { small: true });
+        
+        // Create QR code URL for frontend
+        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qr)}`;
+        
+        console.log('QR Code URL generated for frontend:', qrCodeUrl.substring(0, 100) + '...');
+        console.log('🚀 EMITTING QR-CODE EVENT TO WEBSOCKET!');
+        
+        // Emit the QR code event
+        const qrData = { qr: qrCodeUrl, rawQR: qr };
+        this.emit('qr-code', qrData);
+        console.log('✅ QR-CODE EVENT EMITTED with data:', qrData);
+        
         resolve();
       };
 
       // Set up temporary event handler before initialization
       this.once('qr-received', qrHandler);
       
-      // Initialize client to get new QR code
+      // Reinitialize client to get new QR code
       this.initialize().then(() => {
-        console.log('✅ Fresh QR Code initialization completed');
+        console.log('✅ QR Code generation process completed');
       }).catch((error) => {
         clearTimeout(timeout);
         this.removeListener('qr-received', qrHandler);

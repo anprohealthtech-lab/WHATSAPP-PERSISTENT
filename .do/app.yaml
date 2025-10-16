@@ -10,13 +10,13 @@ services:
   github:
     repo: anprohealthtech-lab/WHATSAPP-PERSISTENT
     branch: master
-  
-  # Use Dockerfile for Chrome installation
-  dockerfile_path: Dockerfile
-  
+  build_command: |
+    npm install
+    npm run build
+  run_command: npm start
   environment_slug: node-js
   instance_count: 1
-  instance_size_slug: basic-s  # 512MB RAM, 0.5 vCPU - minimum for Chrome
+  instance_size_slug: basic-s  # 512MB RAM, 0.5 vCPU
   http_port: 3001
   
   envs:
