@@ -6,7 +6,7 @@ name: whatsapp-lims-app
 
 services:
 - name: whatsapp-lims-api
-  source_dir: /NodeBackend
+  source_dir: NodeBackend
   github:
     repo: anprohealthtech-lab/WHATSAPP-PERSISTENT
     branch: master
