@@ -31,9 +31,6 @@ services:
     scope: RUN_AND_BUILD_TIME
     type: SECRET
     
-  - key: PUPPETEER_EXECUTABLE_PATH
-    value: /usr/bin/chromium-browser
-    
   - key: PORT
     value: "3001"
     
