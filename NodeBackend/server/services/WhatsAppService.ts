@@ -39,6 +39,12 @@ export class WhatsAppService extends EventEmitter {
     try {
       console.log('🚀 Starting Baileys WhatsApp - no Chrome needed!');
       
+      // Clean up any existing socket first
+      if (this.socket) {
+        this.socket.end(undefined);
+        this.socket = null;
+      }
+      
       const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
       const { version } = await fetchLatestBaileysVersion();
 
@@ -46,7 +52,13 @@ export class WhatsAppService extends EventEmitter {
         version,
         auth: state,
         printQRInTerminal: true,
-        browser: ['LIMS System', 'Chrome', '1.0.0']
+        browser: ['LIMS System', 'Chrome', '1.0.0'],
+        connectTimeoutMs: 30000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 30000,
+        // Add retry configuration
+        retryRequestDelayMs: 250,
+        maxMsgRetryCount: 5
       });
 
       this.socket.ev.on('creds.update', saveCreds);
@@ -74,14 +86,22 @@ export class WhatsAppService extends EventEmitter {
           this.status.isConnected = false;
           this.status.isAuthenticated = false;
           
-          const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-          if (shouldReconnect) {
+          const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          
+          console.log(`🔍 Disconnect reason: ${statusCode} (${DisconnectReason[statusCode] || 'unknown'})`);
+          
+          if (shouldReconnect && statusCode !== DisconnectReason.connectionClosed) {
             console.log('🔄 Reconnecting in 5 seconds...');
             setTimeout(() => this.initialize(), 5000);
           } else {
-            console.log('🚪 Logged out - need new QR scan');
+            console.log('🚪 Logged out or connection closed - clearing auth and need new QR scan');
+            // Clear current QR and auth state
+            this.currentQR = null;
             this.emit('whatsapp-auth-failure', { error: 'Logged out' });
           }
+        } else if (connection === 'connecting') {
+          console.log('🔄 Baileys connecting...');
         }
       });
 
@@ -164,8 +184,40 @@ export class WhatsAppService extends EventEmitter {
       return;
     }
     
-    console.log('🔄 No current QR, initializing connection...');
+    // Clean up any existing connection first
+    await this.cleanup();
+    
+    console.log('🔄 No current QR, initializing fresh connection...');
     await this.initialize();
+  }
+
+  async disconnect(): Promise<void> {
+    console.log('🔌 Disconnecting WhatsApp...');
+    
+    if (this.socket) {
+      try {
+        // Logout properly to clear auth state
+        await this.socket.logout();
+      } catch (error) {
+        console.log('⚠️ Error during logout:', error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+    
+    await this.cleanup();
+    
+    // Clear auth files to force fresh QR generation
+    try {
+      const fsPromises = fs.promises;
+      if (fs.existsSync(this.authPath)) {
+        await fsPromises.rm(this.authPath, { recursive: true, force: true });
+        fs.mkdirSync(this.authPath, { recursive: true });
+        console.log('🧹 Authentication files cleared');
+      }
+    } catch (error) {
+      console.log('⚠️ Error clearing auth files:', error instanceof Error ? error.message : 'Unknown error');
+    }
+    
+    this.emit('whatsapp-auth-failure', { error: 'Disconnected' });
   }
 
   getCurrentQR(): string | null {
