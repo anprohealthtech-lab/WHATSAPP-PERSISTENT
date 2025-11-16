@@ -1,17 +1,11 @@
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from '@shared/schema';
 
-let db: any = null;
-if (process.env.DATABASE_URL) {
-  const sql = neon(process.env.DATABASE_URL);
-  db = drizzle(sql, { schema });
-} else {
-  // Dummy db for non-database mode
-  db = {
-    query: async () => { throw new Error('Database not configured'); },
-    // add more dummy methods if needed
-  };
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is required');
 }
-export { db };
+
+const queryClient = postgres(process.env.DATABASE_URL);
+export const db = drizzle(queryClient, { schema });
 export type Database = typeof db;

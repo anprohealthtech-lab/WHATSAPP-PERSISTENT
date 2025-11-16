@@ -33,6 +33,39 @@ export const systemLogs = pgTable("system_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const campaigns = pgTable("campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  originalMessage: text("original_message").notNull(),
+  fixedParams: jsonb("fixed_params"),
+  selectedVariation: text("selected_variation"),
+  totalContacts: integer("total_contacts").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const campaignRecipients = pgTable("campaign_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  extra: jsonb("extra"),
+  status: text("status").default("pending"), // 'pending', 'sent', 'failed'
+  sentAt: timestamp("sent_at"),
+  errorReason: text("error_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const messageVariations = pgTable("message_variations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+  message: text("message").notNull(),
+  originalMessage: text("original_message"),
+  variationNumber: integer("variation_number"),
+  fixedParams: jsonb("fixed_params"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -56,6 +89,9 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertSystemLog = z.infer<typeof insertSystemLogSchema>;
 export type SystemLog = typeof systemLogs.$inferSelect;
+export type Campaign = typeof campaigns.$inferSelect;
+export type CampaignRecipient = typeof campaignRecipients.$inferSelect;
+export type MessageVariation = typeof messageVariations.$inferSelect;
 
 // Additional schemas for API requests
 export const sendMessageSchema = z.object({
@@ -69,5 +105,22 @@ export const sendReportSchema = z.object({
   content: z.string().optional(),
 });
 
+export const createCampaignSchema = z.object({
+  name: z.string().min(1, "Campaign name is required"),
+  originalMessage: z.string().min(1, "Original message is required"),
+  fixedParams: z.record(z.any()).optional(),
+});
+
+export const bulkSendSchema = z.object({
+  variation_message: z.string().min(1, "Variation message is required"),
+  contacts: z.array(z.object({
+    name: z.string(),
+    phone: z.string(),
+    extra: z.record(z.any()).optional(),
+  })).optional(),
+});
+
 export type SendMessageRequest = z.infer<typeof sendMessageSchema>;
 export type SendReportRequest = z.infer<typeof sendReportSchema>;
+export type CreateCampaignRequest = z.infer<typeof createCampaignSchema>;
+export type BulkSendRequest = z.infer<typeof bulkSendSchema>;

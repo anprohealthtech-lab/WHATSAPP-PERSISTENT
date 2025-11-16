@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic, log } from "./utils";
@@ -53,14 +54,18 @@ app.use((req, res, next) => {
     // doesn't interfere with the other routes
     if (process.env.NODE_ENV === "development" && process.env.npm_lifecycle_event !== "build") {
       try {
+        log("Setting up Vite development server...");
         // Dynamic import to avoid loading Vite/Rollup in production
         const { setupVite } = await import("./vite-dev");
         await setupVite(app, server);
+        log("Vite development server setup complete");
       } catch (error) {
-        log("Vite setup not available in production build, serving static files");
+        log(`Vite setup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error("Vite setup failed:", error);
         serveStatic(app);
       }
     } else {
+      log("Production mode - serving static files");
       serveStatic(app);
     }
 

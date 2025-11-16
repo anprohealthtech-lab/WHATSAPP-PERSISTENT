@@ -8,8 +8,10 @@ import { whatsAppService } from "./services/WhatsAppService";
 import { messageService } from "./services/MessageService";
 import { fileService } from "./services/FileService";
 import { persistentFileService } from "./services/PersistentFileService";
-import { sendMessageSchema, sendReportSchema } from "@shared/schema";
+import { campaignService } from "./services/CampaignService";
+import { sendMessageSchema, sendReportSchema, createCampaignSchema, bulkSendSchema } from "@shared/schema";
 import { log } from "./utils";
+import * as XLSX from 'xlsx';
 
 // Configure CORS
 const corsOptions = {
@@ -420,6 +422,190 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         success: false, 
         error: 'Failed to get system logs' 
+      });
+    }
+  });
+
+  // Campaign Routes
+
+  // Create campaign
+  app.post('/api/campaigns', async (req, res) => {
+    try {
+      const validatedData = createCampaignSchema.parse(req.body);
+      const campaign = await campaignService.createCampaign(
+        validatedData.name,
+        validatedData.originalMessage,
+        validatedData.fixedParams
+      );
+
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Create campaign error: ${errorMessage}`);
+      res.status(400).json({ 
+        success: false, 
+        error: errorMessage 
+      });
+    }
+  });
+
+  // Get campaign
+  app.get('/api/campaigns/:campaignId', async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const campaign = await campaignService.getCampaign(campaignId);
+
+      if (!campaign) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Campaign not found' 
+        });
+      }
+
+      res.json({ success: true, data: campaign });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get campaign error: ${errorMessage}`);
+      res.status(500).json({ 
+        success: false, 
+        error: errorMessage 
+      });
+    }
+  });
+
+  // Upload contacts for campaign
+  app.post('/api/campaigns/:campaignId/contacts/upload', upload.single('file'), async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file provided'
+        });
+      }
+
+      // Parse Excel file
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      // Validate and format contacts
+      const contacts = data.map((row: any) => {
+        if (!row.name || !row.phone) {
+          throw new Error('Invalid file format. Expected columns: name, phone');
+        }
+
+        const { name, phone, ...extra } = row;
+        return {
+          name: String(name),
+          phone: String(phone),
+          extra,
+        };
+      });
+
+      // Upload to database
+      const result = await campaignService.uploadContacts(campaignId, contacts);
+
+      res.json(result);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Upload contacts error: ${errorMessage}`);
+      res.status(400).json({ 
+        success: false, 
+        error: errorMessage 
+      });
+    }
+  });
+
+  // Get contacts for campaign
+  app.get('/api/campaigns/:campaignId/contacts', async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const contacts = await campaignService.getContacts(campaignId);
+
+      res.json({ 
+        success: true, 
+        data: contacts,
+        total: contacts.length 
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get contacts error: ${errorMessage}`);
+      res.status(500).json({ 
+        success: false, 
+        error: errorMessage 
+      });
+    }
+  });
+
+  // Save message variation
+  app.post('/api/campaigns/:campaignId/variations', async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const { variation } = req.body;
+
+      if (!variation) {
+        return res.status(400).json({
+          success: false,
+          error: 'Variation message is required'
+        });
+      }
+
+      const saved = await campaignService.saveMessageVariation(campaignId, variation);
+      await campaignService.updateCampaignVariation(campaignId, variation);
+
+      res.json({ success: true, data: saved });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Save variation error: ${errorMessage}`);
+      res.status(400).json({ 
+        success: false, 
+        error: errorMessage 
+      });
+    }
+  });
+
+  // Get message variations
+  app.get('/api/campaigns/:campaignId/variations', async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const variations = await campaignService.getMessageVariations(campaignId);
+
+      res.json({ 
+        success: true, 
+        data: variations 
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get variations error: ${errorMessage}`);
+      res.status(500).json({ 
+        success: false, 
+        error: errorMessage 
+      });
+    }
+  });
+
+  // Bulk send campaign messages
+  app.post('/api/campaigns/:campaignId/send-bulk', async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const validatedData = bulkSendSchema.parse(req.body);
+
+      const result = await campaignService.sendBulkMessages(
+        campaignId,
+        validatedData.variation_message,
+        validatedData.contacts
+      );
+
+      res.json(result);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Bulk send error: ${errorMessage}`);
+      res.status(400).json({ 
+        success: false, 
+        error: errorMessage 
       });
     }
   });
