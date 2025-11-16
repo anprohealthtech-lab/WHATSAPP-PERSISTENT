@@ -57,7 +57,33 @@ export function CampaignMessageVariationPanel({
   // New campaign form state
   const [newCampaignName, setNewCampaignName] = useState('');
   const [originalMessage, setOriginalMessage] = useState('');
-  const [fixedParams, setFixedParams] = useState('{}');
+  const [fixedParams, setFixedParams] = useState<Record<string, string>>({});
+
+  // Extract placeholders from message
+  const extractPlaceholders = (message: string): string[] => {
+    const regex = /\{\{(\w+)\}\}/g;
+    const placeholders = new Set<string>();
+    let match;
+    
+    while ((match = regex.exec(message)) !== null) {
+      if (match[1] !== 'name') { // Exclude {{name}} as it's per-contact
+        placeholders.add(match[1]);
+      }
+    }
+    
+    return Array.from(placeholders);
+  };
+
+  // Update fixed params when a field changes
+  const updateFixedParam = (key: string, value: string) => {
+    setFixedParams(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // Get placeholders from current message
+  const placeholders = extractPlaceholders(originalMessage);
 
   useEffect(() => {
     if (campaignId) {
@@ -112,14 +138,6 @@ export function CampaignMessageVariationPanel({
   const createCampaign = async () => {
     try {
       setError('');
-      
-      let parsedParams = {};
-      try {
-        parsedParams = JSON.parse(fixedParams);
-      } catch {
-        setError('Invalid JSON in fixed params');
-        return;
-      }
 
       const response = await fetch('/api/campaigns', {
         method: 'POST',
@@ -127,7 +145,7 @@ export function CampaignMessageVariationPanel({
         body: JSON.stringify({
           name: newCampaignName,
           originalMessage,
-          fixedParams: parsedParams,
+          fixedParams: fixedParams,
         }),
       });
 
@@ -139,7 +157,7 @@ export function CampaignMessageVariationPanel({
         setSuccess('Campaign created successfully!');
         setNewCampaignName('');
         setOriginalMessage('');
-        setFixedParams('{}');
+        setFixedParams({});
       } else {
         setError(data.error);
       }
@@ -312,20 +330,34 @@ export function CampaignMessageVariationPanel({
               rows={4}
             />
             <p className="text-sm text-muted-foreground">
-              Use {'{{name}}'} for recipient name. Other placeholders will be replaced with fixed params.
+              Use {'{{name}}'} for recipient name. Other placeholders like {'{{date}}'}, {'{{time}}'} will show as fields below.
             </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="fixedParams">Fixed Parameters (JSON)</Label>
-            <Textarea
-              id="fixedParams"
-              value={fixedParams}
-              onChange={(e) => setFixedParams(e.target.value)}
-              placeholder='{"date": "20 Nov 2025", "time": "5:00 PM", "clinic_name": "Womanhood Clinic"}'
-              rows={3}
-            />
-          </div>
+          {placeholders.length > 0 && (
+            <div className="space-y-4 border rounded-lg p-4 bg-muted/50">
+              <Label className="text-base font-semibold">Fixed Parameters</Label>
+              <p className="text-sm text-muted-foreground">
+                Fill in values for placeholders found in your message:
+              </p>
+              {placeholders.map((placeholder) => (
+                <div key={placeholder} className="space-y-2">
+                  <Label htmlFor={placeholder} className="flex items-center gap-2">
+                    <code className="text-xs bg-secondary px-2 py-1 rounded">
+                      {'{{' + placeholder + '}}'}
+                    </code>
+                    {placeholder.charAt(0).toUpperCase() + placeholder.slice(1)}
+                  </Label>
+                  <Input
+                    id={placeholder}
+                    value={fixedParams[placeholder] || ''}
+                    onChange={(e) => updateFixedParam(placeholder, e.target.value)}
+                    placeholder={`Enter value for ${placeholder}`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           <Button onClick={createCampaign} className="w-full">
             Create Campaign
