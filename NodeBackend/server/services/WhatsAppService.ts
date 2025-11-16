@@ -229,10 +229,14 @@ export class WhatsAppService extends EventEmitter {
   }
 
   private formatPhoneNumber(phoneNumber: string): string {
+    // Remove all non-digit characters
     let cleaned = phoneNumber.replace(/\D/g, '');
-    if (!cleaned.startsWith('1') && cleaned.length === 10) {
-      cleaned = '1' + cleaned;
+    
+    // If number doesn't start with country code and is 10 digits, assume India (+91)
+    if (!cleaned.startsWith('91') && cleaned.length === 10) {
+      cleaned = '91' + cleaned;
     }
+    
     return cleaned;
   }
 

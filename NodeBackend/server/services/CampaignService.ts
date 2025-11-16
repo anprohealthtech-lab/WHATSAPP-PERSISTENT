@@ -84,11 +84,27 @@ export class CampaignService {
       throw new Error('Campaign not found');
     }
 
+    // Remove duplicates based on phone number (keep first occurrence)
+    const uniqueContacts: ContactRow[] = [];
+    const seenPhones = new Set<string>();
+    
+    for (const contact of contacts) {
+      const cleanPhone = contact.phone.replace(/\D/g, '');
+      if (!seenPhones.has(cleanPhone)) {
+        seenPhones.add(cleanPhone);
+        uniqueContacts.push(contact);
+      } else {
+        log(`⚠️  Skipping duplicate phone number: ${contact.phone} (${contact.name})`);
+      }
+    }
+
+    log(`📊 Original contacts: ${contacts.length}, After deduplication: ${uniqueContacts.length}`);
+
     // Insert contacts
     const insertedContacts = await db
       .insert(campaignRecipients)
       .values(
-        contacts.map(contact => ({
+        uniqueContacts.map(contact => ({
           campaignId,
           name: contact.name,
           phone: contact.phone,
