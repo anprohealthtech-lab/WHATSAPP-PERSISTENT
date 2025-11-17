@@ -752,8 +752,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(autoResponses);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : '';
       log(`Get all auto-responses error: ${errorMessage}`);
-      res.status(400).json({ success: false, error: errorMessage });
+      console.error('Full error:', error);
+      console.error('Stack:', errorStack);
+      res.status(500).json({ success: false, error: errorMessage || 'Failed to get auto-responses' });
     }
   });
 
@@ -778,8 +781,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, autoResponse });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : '';
       log(`Create auto-response error: ${errorMessage}`);
-      res.status(400).json({ success: false, error: errorMessage });
+      console.error('Full error:', error);
+      console.error('Stack:', errorStack);
+      res.status(500).json({ success: false, error: errorMessage || 'Failed to create auto-response' });
     }
   });
 
@@ -834,8 +840,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(messages);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : '';
       log(`Get incoming messages error: ${errorMessage}`);
-      res.status(400).json({ success: false, error: errorMessage });
+      console.error('Full error:', error);
+      console.error('Stack:', errorStack);
+      res.status(500).json({ success: false, error: errorMessage || 'Failed to get incoming messages' });
     }
   });
 
