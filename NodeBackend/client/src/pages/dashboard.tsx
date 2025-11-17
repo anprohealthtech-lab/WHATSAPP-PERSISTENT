@@ -312,8 +312,8 @@ export default function Dashboard() {
               <MessageSquare className="text-white text-xl" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">LIMS Integration</h1>
-              <p className="text-sm text-gray-500">WhatsApp System</p>
+              <h1 className="text-lg font-semibold text-gray-900">WhatsApp System</h1>
+              <p className="text-sm text-gray-500">Message Management</p>
             </div>
           </div>
         </div>
@@ -356,7 +356,7 @@ export default function Dashboard() {
               <User className="text-gray-600 text-sm" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">Lab Admin</p>
+              <p className="text-sm font-medium text-gray-900">Admin</p>
               <p className="text-xs text-gray-500">System Administrator</p>
             </div>
           </div>
@@ -370,7 +370,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-              <p className="text-gray-600">WhatsApp LIMS Integration System</p>
+              <p className="text-gray-600">WhatsApp Message System</p>
             </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
