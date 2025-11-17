@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { whatsAppService } from './WhatsAppService';
 import { messageService } from './MessageService';
 import { variationService } from './VariationService';
+import { storage } from '../storage';
 import { log } from '../utils';
 
 interface ContactRow {
@@ -27,13 +28,15 @@ export class CampaignService {
     name: string, 
     originalMessage: string, 
     fixedParams?: Record<string, any>,
-    buttons?: Array<{ text: string; url?: string; phoneNumber?: string }>
+    buttons?: Array<{ text: string; url?: string; phoneNumber?: string }>,
+    includeStopButton?: boolean
   ) {
     const [campaign] = await db.insert(campaigns).values({
       name,
       originalMessage,
       fixedParams: fixedParams || {},
       buttons: buttons || [],
+      includeStopButton: includeStopButton ? 'true' : 'false',
     }).returning();
     
     return campaign;
@@ -195,6 +198,19 @@ export class CampaignService {
       const contactNum = i + 1;
       
       try {
+        // Check if number is blocked
+        const isBlocked = await storage.isNumberBlocked(contact.phone);
+        if (isBlocked) {
+          log(`  ⏭️  Skipping blocked number: ${contact.phone}`);
+          failed++;
+          failedList.push({
+            phone: contact.phone,
+            name: contact.name,
+            reason: 'Number is blocked (user opted out)',
+          });
+          continue;
+        }
+
         log(`\n[${contactNum}/${contacts.length}] Processing: ${contact.name} (${contact.phone})`);
 
         // Generate unique variation for this contact
@@ -236,9 +252,15 @@ export class CampaignService {
 
         log(`  ↪ Sending personalized message...`);
         
+        // Check if stop button should be included
+        const includeStop = campaign.includeStopButton === 'true';
+        
         // Send via WhatsApp service (with buttons if configured)
         if (campaign.buttons && Array.isArray(campaign.buttons) && campaign.buttons.length > 0) {
-          await whatsAppService.sendMessageWithButtons(contact.phone, personalizedMessage, campaign.buttons);
+          await whatsAppService.sendMessageWithButtons(contact.phone, personalizedMessage, campaign.buttons, includeStop);
+        } else if (includeStop) {
+          // Send with only stop button
+          await whatsAppService.sendMessageWithButtons(contact.phone, personalizedMessage, [], true);
         } else {
           await whatsAppService.sendTextMessage(contact.phone, personalizedMessage);
         }

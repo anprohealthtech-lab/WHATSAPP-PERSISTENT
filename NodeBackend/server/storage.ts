@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Message, type InsertMessage, type SystemLog, type InsertSystemLog } from "@shared/schema";
+import { type User, type InsertUser, type Message, type InsertMessage, type SystemLog, type InsertSystemLog, type BlockedNumber } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -18,6 +18,13 @@ export interface IStorage {
   // System log methods
   getSystemLogs(limit?: number, offset?: number): Promise<SystemLog[]>;
   createSystemLog(log: InsertSystemLog): Promise<SystemLog>;
+
+  // Blocklist methods
+  addToBlocklist(phoneNumber: string, reason?: string): Promise<BlockedNumber>;
+  removeFromBlocklist(phoneNumber: string): Promise<void>;
+  isNumberBlocked(phoneNumber: string): Promise<boolean>;
+  getBlockedNumbers(): Promise<BlockedNumber[]>;
+  getBlockedNumber(phoneNumber: string): Promise<BlockedNumber | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -135,6 +142,40 @@ export class MemStorage implements IStorage {
     };
     this.systemLogs.set(id, log);
     return log;
+  }
+
+  // Blocklist methods (MemStorage implementation)
+  private blockedNumbers: Map<string, BlockedNumber> = new Map();
+
+  async addToBlocklist(phoneNumber: string, reason: string = 'user_requested'): Promise<BlockedNumber> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    const blocked: BlockedNumber = {
+      id: randomUUID(),
+      phoneNumber: cleanedNumber,
+      reason,
+      blockedAt: new Date(),
+    };
+    this.blockedNumbers.set(cleanedNumber, blocked);
+    return blocked;
+  }
+
+  async removeFromBlocklist(phoneNumber: string): Promise<void> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    this.blockedNumbers.delete(cleanedNumber);
+  }
+
+  async isNumberBlocked(phoneNumber: string): Promise<boolean> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    return this.blockedNumbers.has(cleanedNumber);
+  }
+
+  async getBlockedNumbers(): Promise<BlockedNumber[]> {
+    return Array.from(this.blockedNumbers.values());
+  }
+
+  async getBlockedNumber(phoneNumber: string): Promise<BlockedNumber | undefined> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    return this.blockedNumbers.get(cleanedNumber);
   }
 }
 

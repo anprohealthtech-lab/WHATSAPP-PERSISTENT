@@ -40,6 +40,7 @@ export const campaigns = pgTable("campaigns", {
   fixedParams: jsonb("fixed_params"),
   selectedVariation: text("selected_variation"),
   buttons: jsonb("buttons"), // Array of { text: string; url?: string; phoneNumber?: string }
+  includeStopButton: text("include_stop_button").default("false"), // "true" or "false"
   totalContacts: integer("total_contacts").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -65,6 +66,13 @@ export const messageVariations = pgTable("message_variations", {
   variationNumber: integer("variation_number"),
   fixedParams: jsonb("fixed_params"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const blockedNumbers = pgTable("blocked_numbers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phoneNumber: text("phone_number").notNull().unique(),
+  reason: text("reason").default("user_requested"), // 'user_requested', 'spam', 'admin_blocked'
+  blockedAt: timestamp("blocked_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -93,6 +101,7 @@ export type SystemLog = typeof systemLogs.$inferSelect;
 export type Campaign = typeof campaigns.$inferSelect;
 export type CampaignRecipient = typeof campaignRecipients.$inferSelect;
 export type MessageVariation = typeof messageVariations.$inferSelect;
+export type BlockedNumber = typeof blockedNumbers.$inferSelect;
 
 // Additional schemas for API requests
 export const sendMessageSchema = z.object({
@@ -115,6 +124,7 @@ export const createCampaignSchema = z.object({
     url: z.string().optional(),
     phoneNumber: z.string().optional(),
   })).optional(),
+  includeStopButton: z.boolean().optional(), // Add quick reply "Stop Messages" button
 });
 
 export const bulkSendSchema = z.object({

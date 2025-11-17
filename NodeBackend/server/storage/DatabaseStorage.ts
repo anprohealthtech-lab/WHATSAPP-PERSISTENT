@@ -1,7 +1,7 @@
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { users, messages, systemLogs } from '@shared/schema';
-import type { User, InsertUser, Message, InsertMessage, SystemLog, InsertSystemLog } from '@shared/schema';
+import { users, messages, systemLogs, blockedNumbers } from '@shared/schema';
+import type { User, InsertUser, Message, InsertMessage, SystemLog, InsertSystemLog, BlockedNumber } from '@shared/schema';
 import type { IStorage } from '../storage';
 
 export class DatabaseStorage implements IStorage {
@@ -109,6 +109,53 @@ export class DatabaseStorage implements IStorage {
 
   async createSystemLog(log: InsertSystemLog): Promise<SystemLog> {
     const result = await db.insert(systemLogs).values(log).returning();
+    return result[0];
+  }
+
+  // Blocklist methods
+  async addToBlocklist(phoneNumber: string, reason: string = 'user_requested'): Promise<BlockedNumber> {
+    // Clean phone number format
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    
+    const result = await db.insert(blockedNumbers)
+      .values({
+        phoneNumber: cleanedNumber,
+        reason
+      })
+      .onConflictDoNothing()
+      .returning();
+    
+    return result[0] || await this.getBlockedNumber(cleanedNumber);
+  }
+
+  async removeFromBlocklist(phoneNumber: string): Promise<void> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    await db.delete(blockedNumbers).where(eq(blockedNumbers.phoneNumber, cleanedNumber));
+  }
+
+  async isNumberBlocked(phoneNumber: string): Promise<boolean> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    const result = await db.select()
+      .from(blockedNumbers)
+      .where(eq(blockedNumbers.phoneNumber, cleanedNumber))
+      .limit(1);
+    
+    return result.length > 0;
+  }
+
+  async getBlockedNumbers(): Promise<BlockedNumber[]> {
+    return await db.select()
+      .from(blockedNumbers)
+      .orderBy(desc(blockedNumbers.blockedAt));
+  }
+
+  async getBlockedNumber(phoneNumber: string): Promise<BlockedNumber | undefined> {
+    const cleanedNumber = phoneNumber.replace(/\D/g, '');
+    const result = await db.select()
+      .from(blockedNumbers)
+      .where(eq(blockedNumbers.phoneNumber, cleanedNumber))
+      .limit(1);
+    
     return result[0];
   }
 }

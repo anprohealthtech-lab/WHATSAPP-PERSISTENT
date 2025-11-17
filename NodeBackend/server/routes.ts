@@ -119,6 +119,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await messageService.updateMessageDeliveryStatus(data.messageId, data.ack === 3 ? 'delivered' : 'failed');
       broadcast('message-update', data);
     });
+
+    whatsAppService.on('button-clicked', async (data) => {
+      console.log('📱 Button clicked event received:', data);
+      
+      // Handle STOP_MESSAGES button
+      if (data.buttonId === 'STOP_MESSAGES') {
+        try {
+          await storage.addToBlocklist(data.phoneNumber, 'user_requested');
+          console.log(`✅ Added ${data.phoneNumber} to blocklist`);
+          
+          // Send confirmation message
+          await whatsAppService.sendTextMessage(
+            data.phoneNumber,
+            '✅ You have been unsubscribed. You will not receive any more messages from us.'
+          );
+        } catch (error) {
+          console.error('Failed to block number:', error);
+        }
+      }
+      
+      broadcast('button-clicked', data);
+    });
   };
   
   setupWhatsAppEventListeners();
@@ -436,7 +458,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.name,
         validatedData.originalMessage,
         validatedData.fixedParams,
-        validatedData.buttons
+        validatedData.buttons,
+        validatedData.includeStopButton
       );
 
       res.json({ success: true, data: campaign });
@@ -608,6 +631,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         error: errorMessage 
       });
+    }
+  });
+
+  // Block a phone number
+  app.post('/api/blocklist/add', async (req, res) => {
+    try {
+      const { phoneNumber, reason } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ success: false, error: 'Phone number is required' });
+      }
+
+      await storage.addToBlocklist(phoneNumber, reason || 'user_requested');
+      
+      log(`Blocked number: ${phoneNumber}`);
+      res.json({ success: true, message: 'Number blocked successfully' });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Block number error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Unblock a phone number
+  app.post('/api/blocklist/remove', async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ success: false, error: 'Phone number is required' });
+      }
+
+      await storage.removeFromBlocklist(phoneNumber);
+      
+      log(`Unblocked number: ${phoneNumber}`);
+      res.json({ success: true, message: 'Number unblocked successfully' });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Unblock number error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Check if number is blocked
+  app.get('/api/blocklist/check/:phoneNumber', async (req, res) => {
+    try {
+      const { phoneNumber } = req.params;
+      const isBlocked = await storage.isNumberBlocked(phoneNumber);
+      
+      res.json({ isBlocked });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Check blocklist error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Get all blocked numbers
+  app.get('/api/blocklist', async (req, res) => {
+    try {
+      const blockedNumbers = await storage.getBlockedNumbers();
+      res.json(blockedNumbers);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get blocklist error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
     }
   });
 

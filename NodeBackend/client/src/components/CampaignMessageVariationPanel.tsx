@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Upload, Send, RefreshCw } from 'lucide-react';
 
 interface Campaign {
@@ -60,6 +61,7 @@ export function CampaignMessageVariationPanel({
   const [fixedParams, setFixedParams] = useState<Record<string, string>>({});
   const [buttons, setButtons] = useState<Array<{ text: string; url?: string }>>([]);
   const [showButtons, setShowButtons] = useState(false);
+  const [includeStopButton, setIncludeStopButton] = useState(false);
 
   // Extract placeholders from message
   const extractPlaceholders = (message: string): string[] => {
@@ -166,6 +168,7 @@ export function CampaignMessageVariationPanel({
           originalMessage,
           fixedParams,
           buttons: buttons.filter(b => b.text.trim() !== ''), // Only send non-empty buttons
+          includeStopButton, // Add stop button option
         }),
       });
 
@@ -437,6 +440,30 @@ export function CampaignMessageVariationPanel({
                   </AlertDescription>
                 </Alert>
               </div>
+            )}
+          </div>
+
+          {/* Stop Button Option */}
+          <div className="space-y-2 border rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="includeStopButton"
+                checked={includeStopButton}
+                onCheckedChange={(checked) => setIncludeStopButton(checked as boolean)}
+              />
+              <Label htmlFor="includeStopButton" className="text-base font-semibold cursor-pointer">
+                Include "Stop Messages" Quick Reply Button
+              </Label>
+            </div>
+            <p className="text-sm text-muted-foreground ml-6">
+              Users can tap to instantly unsubscribe. Numbers will be automatically blocked from future campaigns.
+            </p>
+            {includeStopButton && (
+              <Alert className="ml-6 mt-2">
+                <AlertDescription className="text-xs">
+                  ✅ When enabled, messages will include a quick reply button saying "🚫 Stop Receiving Messages" that users can tap to opt out.
+                </AlertDescription>
+              </Alert>
             )}
           </div>
 

@@ -105,6 +105,29 @@ export class WhatsAppService extends EventEmitter {
         }
       });
 
+      // Listen for interactive message responses (quick reply buttons)
+      this.socket.ev.on('messages.upsert', async ({ messages }) => {
+        const msg = messages[0];
+        if (!msg.message) return;
+
+        // Handle interactive quick reply responses
+        if (msg.message.interactiveResponseMessage) {
+          const res = msg.message.interactiveResponseMessage.nativeFlowResponseMessage;
+          const buttonId = res?.paramsJson ? JSON.parse(res.paramsJson)?.id : null;
+          const from = msg.key.remoteJid;
+
+          console.log('📱 Quick Reply Button Clicked:', buttonId, 'from', from);
+
+          // Emit event for button click handling
+          this.emit('button-clicked', {
+            buttonId,
+            from,
+            phoneNumber: from?.replace('@s.whatsapp.net', ''),
+            timestamp: Date.now(),
+          });
+        }
+      });
+
     } catch (error: any) {
       console.error('❌ Baileys init failed:', error);
       this.emit('whatsapp-auth-failure', { error: error?.message });
@@ -137,13 +160,82 @@ export class WhatsAppService extends EventEmitter {
   async sendMessageWithButtons(
     phoneNumber: string, 
     message: string, 
-    buttons: Array<{ text: string; url?: string; phoneNumber?: string }>
+    buttons: Array<{ text: string; url?: string; phoneNumber?: string }>,
+    includeStopButton = false
   ): Promise<any> {
     if (!this.socket || !this.status.isConnected) {
       throw new Error('WhatsApp not connected');
     }
 
-    // Append buttons as clickable links at the end of message
+    const jid = `${this.formatPhoneNumber(phoneNumber)}@s.whatsapp.net`;
+
+    // If includeStopButton is true, send interactive message with quick reply
+    if (includeStopButton) {
+      try {
+        const interactiveButtons: any[] = [];
+
+        // Add URL/Call buttons if provided
+        for (const btn of buttons) {
+          if (btn.url) {
+            interactiveButtons.push({
+              name: 'cta_url',
+              buttonParamsJson: JSON.stringify({
+                display_text: btn.text,
+                url: btn.url,
+              })
+            });
+          } else if (btn.phoneNumber) {
+            interactiveButtons.push({
+              name: 'cta_call',
+              buttonParamsJson: JSON.stringify({
+                display_text: btn.text,
+                phone_number: btn.phoneNumber,
+              })
+            });
+          }
+        }
+
+        // Always add the "Stop Messages" quick reply button
+        interactiveButtons.push({
+          name: 'quick_reply',
+          buttonParamsJson: JSON.stringify({
+            display_text: '🚫 Stop Receiving Messages',
+            id: 'STOP_MESSAGES'
+          })
+        });
+
+        const result = await this.socket.sendMessage(jid, {
+          interactiveMessage: {
+            body: { text: message },
+            footer: { text: 'Reply STOP to unsubscribe' },
+            nativeFlowMessage: {
+              buttons: interactiveButtons,
+              messageParamsJson: ''
+            }
+          }
+        });
+
+        this.status.lastSeen = new Date();
+        this.emit('message-sent', {
+          messageId: result?.key?.id,
+          to: jid,
+          timestamp: Date.now(),
+        });
+
+        return {
+          id: result?.key?.id,
+          to: jid,
+          body: message,
+          hasButtons: true,
+          timestamp: Date.now(),
+        };
+      } catch (error) {
+        console.error('Failed to send interactive message, falling back to text:', error);
+        // Fallback to text message with buttons
+      }
+    }
+
+    // Fallback: Append buttons as clickable links at the end of message
     let fullMessage = message + '\n\n';
     
     for (const btn of buttons) {
@@ -154,6 +246,10 @@ export class WhatsAppService extends EventEmitter {
       } else {
         fullMessage += `✅ ${btn.text}\n`;
       }
+    }
+
+    if (includeStopButton) {
+      fullMessage += '\n🚫 Reply "STOP" to stop receiving messages';
     }
 
     // Use regular text message - URLs are auto-clickable in WhatsApp
