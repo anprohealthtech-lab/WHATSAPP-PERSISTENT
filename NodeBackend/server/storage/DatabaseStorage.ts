@@ -1,7 +1,7 @@
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { users, messages, systemLogs, blockedNumbers } from '@shared/schema';
-import type { User, InsertUser, Message, InsertMessage, SystemLog, InsertSystemLog, BlockedNumber } from '@shared/schema';
+import { users, messages, systemLogs, blockedNumbers, autoResponses } from '@shared/schema';
+import type { User, InsertUser, Message, InsertMessage, SystemLog, InsertSystemLog, BlockedNumber, AutoResponse } from '@shared/schema';
 import type { IStorage } from '../storage';
 
 export class DatabaseStorage implements IStorage {
@@ -157,5 +157,59 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return result[0];
+  }
+
+  // Auto-response methods
+  async getAutoResponses(): Promise<AutoResponse[]> {
+    return await db.select()
+      .from(autoResponses)
+      .where(eq(autoResponses.isActive, 'true'))
+      .orderBy(desc(autoResponses.createdAt));
+  }
+
+  async getAllAutoResponses(): Promise<AutoResponse[]> {
+    return await db.select()
+      .from(autoResponses)
+      .orderBy(desc(autoResponses.createdAt));
+  }
+
+  async createAutoResponse(data: {
+    keyword: string;
+    response: string;
+    isActive?: boolean;
+  }): Promise<AutoResponse> {
+    const result = await db.insert(autoResponses)
+      .values({
+        keyword: data.keyword,
+        response: data.response,
+        isActive: data.isActive === false ? 'false' : 'true',
+      })
+      .returning();
+    
+    return result[0];
+  }
+
+  async updateAutoResponse(
+    id: string,
+    data: { keyword?: string; response?: string; isActive?: boolean }
+  ): Promise<AutoResponse | undefined> {
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+    
+    if (data.keyword !== undefined) updateData.keyword = data.keyword;
+    if (data.response !== undefined) updateData.response = data.response;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive ? 'true' : 'false';
+
+    const result = await db.update(autoResponses)
+      .set(updateData)
+      .where(eq(autoResponses.id, id))
+      .returning();
+    
+    return result[0];
+  }
+
+  async deleteAutoResponse(id: string): Promise<void> {
+    await db.delete(autoResponses).where(eq(autoResponses.id, id));
   }
 }

@@ -132,4 +132,20 @@ export const api = {
     const result = await response.json();
     return result.data;
   },
+
+  // Generic HTTP methods
+  post: async (url: string, data: any) => {
+    const response = await apiRequest('POST', url, data);
+    return response.json();
+  },
+
+  put: async (url: string, data: any) => {
+    const response = await apiRequest('PUT', url, data);
+    return response.json();
+  },
+
+  delete: async (url: string) => {
+    const response = await apiRequest('DELETE', url);
+    return response.json();
+  },
 };

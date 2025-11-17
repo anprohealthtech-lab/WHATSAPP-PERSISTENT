@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Message, type InsertMessage, type SystemLog, type InsertSystemLog, type BlockedNumber } from "@shared/schema";
+import { type User, type InsertUser, type Message, type InsertMessage, type SystemLog, type InsertSystemLog, type BlockedNumber, type AutoResponse } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -25,6 +25,13 @@ export interface IStorage {
   isNumberBlocked(phoneNumber: string): Promise<boolean>;
   getBlockedNumbers(): Promise<BlockedNumber[]>;
   getBlockedNumber(phoneNumber: string): Promise<BlockedNumber | undefined>;
+
+  // Auto-response methods
+  getAutoResponses(): Promise<AutoResponse[]>;
+  getAllAutoResponses(): Promise<AutoResponse[]>;
+  createAutoResponse(data: { keyword: string; response: string; isActive?: boolean }): Promise<AutoResponse>;
+  updateAutoResponse(id: string, data: { keyword?: string; response?: string; isActive?: boolean }): Promise<AutoResponse | undefined>;
+  deleteAutoResponse(id: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -176,6 +183,54 @@ export class MemStorage implements IStorage {
   async getBlockedNumber(phoneNumber: string): Promise<BlockedNumber | undefined> {
     const cleanedNumber = phoneNumber.replace(/\D/g, '');
     return this.blockedNumbers.get(cleanedNumber);
+  }
+
+  // Auto-response methods (MemStorage implementation)
+  private autoResponses: Map<string, AutoResponse> = new Map();
+
+  async getAutoResponses(): Promise<AutoResponse[]> {
+    return Array.from(this.autoResponses.values()).filter(ar => ar.isActive === 'true');
+  }
+
+  async getAllAutoResponses(): Promise<AutoResponse[]> {
+    return Array.from(this.autoResponses.values());
+  }
+
+  async createAutoResponse(data: { keyword: string; response: string; isActive?: boolean }): Promise<AutoResponse> {
+    const id = randomUUID();
+    const autoResponse: AutoResponse = {
+      id,
+      keyword: data.keyword,
+      response: data.response,
+      isActive: data.isActive === false ? 'false' : 'true',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.autoResponses.set(id, autoResponse);
+    return autoResponse;
+  }
+
+  async updateAutoResponse(
+    id: string,
+    data: { keyword?: string; response?: string; isActive?: boolean }
+  ): Promise<AutoResponse | undefined> {
+    const existing = this.autoResponses.get(id);
+    if (!existing) return undefined;
+
+    const updated: AutoResponse = {
+      ...existing,
+      keyword: data.keyword !== undefined ? data.keyword : existing.keyword,
+      response: data.response !== undefined ? data.response : existing.response,
+      isActive: data.isActive !== undefined ? (data.isActive ? 'true' : 'false') : existing.isActive,
+      updatedAt: new Date(),
+    };
+    
+    this.autoResponses.set(id, updated);
+    return updated;
+  }
+
+  async deleteAutoResponse(id: string): Promise<void> {
+    this.autoResponses.delete(id);
   }
 }
 

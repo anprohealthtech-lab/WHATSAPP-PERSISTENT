@@ -75,6 +75,15 @@ export const blockedNumbers = pgTable("blocked_numbers", {
   blockedAt: timestamp("blocked_at").defaultNow(),
 });
 
+export const autoResponses = pgTable("auto_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyword: text("keyword").notNull(),
+  response: text("response").notNull(),
+  isActive: text("is_active").default("true").notNull(), // "true" or "false"
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -102,6 +111,7 @@ export type Campaign = typeof campaigns.$inferSelect;
 export type CampaignRecipient = typeof campaignRecipients.$inferSelect;
 export type MessageVariation = typeof messageVariations.$inferSelect;
 export type BlockedNumber = typeof blockedNumbers.$inferSelect;
+export type AutoResponse = typeof autoResponses.$inferSelect;
 
 // Additional schemas for API requests
 export const sendMessageSchema = z.object({

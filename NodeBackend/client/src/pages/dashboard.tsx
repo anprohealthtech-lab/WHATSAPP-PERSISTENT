@@ -70,6 +70,8 @@ export default function Dashboard() {
     offset: 0,
   });
   const [activeSection, setActiveSection] = useState<string>("dashboard");
+  const [showIncomingPanel, setShowIncomingPanel] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -119,6 +121,16 @@ export default function Dashboard() {
   const { data: messageHistory, isLoading: messagesLoading } = useQuery({
     queryKey: ["/api/messages", messageFilters],
     queryFn: () => api.getMessages(messageFilters),
+  });
+
+  const { data: incomingMessages = [] } = useQuery({
+    queryKey: ["/api/incoming-messages"],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
+  const { data: autoResponses = [] } = useQuery<any[]>({
+    queryKey: ["/api/auto-responses/all"],
+    refetchInterval: 30000,
   });
 
   // Mutations
@@ -196,6 +208,62 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to resend message",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createAutoResponseMutation = useMutation({
+    mutationFn: (data: { keyword: string; response: string; isActive?: boolean }) =>
+      api.post("/api/auto-responses", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses/all"] });
+      toast({
+        title: "Auto-Response Created",
+        description: "New auto-response has been added successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create auto-response",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateAutoResponseMutation = useMutation({
+    mutationFn: ({ id, ...data }: { id: string; keyword?: string; response?: string; isActive?: boolean }) =>
+      api.put(`/api/auto-responses/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses/all"] });
+      toast({
+        title: "Auto-Response Updated",
+        description: "Auto-response has been updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update auto-response",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteAutoResponseMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/auto-responses/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auto-responses/all"] });
+      toast({
+        title: "Auto-Response Deleted",
+        description: "Auto-response has been deleted successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete auto-response",
         variant: "destructive",
       });
     },
@@ -348,6 +416,17 @@ export default function Dashboard() {
             <History className="w-5 mr-3" />
             Message History
           </button>
+          <button 
+            onClick={() => setActiveSection("auto-responses")} 
+            className={`w-full flex items-center px-4 py-3 rounded-lg transition-colors ${
+              activeSection === "auto-responses" 
+                ? "text-primary bg-blue-50 border-r-2 border-primary font-medium" 
+                : "text-gray-600 hover:text-primary hover:bg-gray-50"
+            }`}
+          >
+            <MessageSquare className="w-5 mr-3" />
+            Auto-Responses
+          </button>
         </nav>
 
         <div className="p-4 border-t border-gray-200">
@@ -383,6 +462,22 @@ export default function Dashboard() {
                   {isConnected ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
+              
+              {/* Incoming Messages Bell Icon */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowIncomingPanel(true)}
+                className="relative"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -924,6 +1019,118 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Auto-Responses Section */}
+          {activeSection === "auto-responses" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Auto-Responses</h3>
+                    <p className="text-sm text-gray-600">Manage keyword-based automatic replies</p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const keyword = prompt("Enter keyword (e.g., YES, INTERESTED):");
+                      if (!keyword) return;
+                      const response = prompt("Enter auto-response message:");
+                      if (!response) return;
+                      createAutoResponseMutation.mutate({ keyword, response });
+                    }}
+                  >
+                    Add New
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {autoResponses.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                      <p>No auto-responses configured</p>
+                      <p className="text-sm mt-1">Create your first auto-response to get started</p>
+                    </div>
+                  ) : (
+                    autoResponses.map((autoResponse: any) => (
+                      <div 
+                        key={autoResponse.id} 
+                        className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Badge variant={autoResponse.isActive === 'true' ? 'default' : 'secondary'}>
+                                {autoResponse.keyword}
+                              </Badge>
+                              <span className="text-xs text-gray-500">
+                                {autoResponse.isActive === 'true' ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700">{autoResponse.response}</p>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Created: {new Date(autoResponse.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2 ml-4">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newIsActive = autoResponse.isActive === 'true' ? false : true;
+                                updateAutoResponseMutation.mutate({ 
+                                  id: autoResponse.id, 
+                                  isActive: newIsActive 
+                                });
+                              }}
+                            >
+                              {autoResponse.isActive === 'true' ? '🔕' : '🔔'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const newKeyword = prompt("Enter new keyword:", autoResponse.keyword);
+                                if (!newKeyword) return;
+                                const newResponse = prompt("Enter new response:", autoResponse.response);
+                                if (!newResponse) return;
+                                updateAutoResponseMutation.mutate({ 
+                                  id: autoResponse.id, 
+                                  keyword: newKeyword,
+                                  response: newResponse
+                                });
+                              }}
+                            >
+                              ✏️
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (confirm(`Delete auto-response for "${autoResponse.keyword}"?`)) {
+                                  deleteAutoResponseMutation.mutate(autoResponse.id);
+                                }
+                              }}
+                            >
+                              🗑️
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-sm text-blue-900 mb-2">💡 How Auto-Responses Work</h4>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Keywords are matched case-insensitively</li>
+                    <li>• First matching keyword triggers the response</li>
+                    <li>• Responses are sent automatically when recipients reply with matching keywords</li>
+                    <li>• Example: When someone replies "YES", send "Thank you for your interest!"</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           )}

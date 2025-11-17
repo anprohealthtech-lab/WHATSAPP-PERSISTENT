@@ -9,6 +9,7 @@ import { messageService } from "./services/MessageService";
 import { fileService } from "./services/FileService";
 import { persistentFileService } from "./services/PersistentFileService";
 import { campaignService } from "./services/CampaignService";
+import { autoResponseService } from "./services/AutoResponseService";
 import { sendMessageSchema, sendReportSchema, createCampaignSchema, bulkSendSchema } from "@shared/schema";
 import { log } from "./utils";
 import * as XLSX from 'xlsx';
@@ -140,6 +141,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       broadcast('button-clicked', data);
+    });
+
+    // Handle incoming messages
+    whatsAppService.on('incoming-message', async (data) => {
+      console.log('📥 Incoming message received:', data);
+      
+      try {
+        // Save incoming message to database
+        await storage.createMessage({
+          phoneNumber: data.phoneNumber,
+          content: data.content,
+          type: 'incoming',
+          status: 'received',
+        });
+
+        // Check and trigger auto-responses
+        const responded = await autoResponseService.handleIncomingMessage(
+          data.phoneNumber,
+          data.content
+        );
+
+        if (responded) {
+          console.log(`✅ Auto-response sent to ${data.phoneNumber}`);
+        }
+
+        // Broadcast to WebSocket clients
+        broadcast('incoming-message', data);
+      } catch (error) {
+        console.error('Failed to handle incoming message:', error);
+      }
     });
   };
   
@@ -696,6 +727,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log(`Get blocklist error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Auto-response routes
+  
+  // Get all auto-responses (active only)
+  app.get('/api/auto-responses', async (req, res) => {
+    try {
+      const autoResponses = await storage.getAutoResponses();
+      res.json(autoResponses);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get auto-responses error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Get all auto-responses (including inactive)
+  app.get('/api/auto-responses/all', async (req, res) => {
+    try {
+      const autoResponses = await storage.getAllAutoResponses();
+      res.json(autoResponses);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get all auto-responses error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Create new auto-response
+  app.post('/api/auto-responses', async (req, res) => {
+    try {
+      const { keyword, response, isActive } = req.body;
+      
+      if (!keyword || !response) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Keyword and response are required' 
+        });
+      }
+
+      const autoResponse = await storage.createAutoResponse({
+        keyword,
+        response,
+        isActive: isActive !== false, // Default to true
+      });
+
+      res.json({ success: true, autoResponse });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Create auto-response error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Update auto-response
+  app.put('/api/auto-responses/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { keyword, response, isActive } = req.body;
+
+      const autoResponse = await storage.updateAutoResponse(id, {
+        keyword,
+        response,
+        isActive,
+      });
+
+      if (!autoResponse) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Auto-response not found' 
+        });
+      }
+
+      res.json({ success: true, autoResponse });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Update auto-response error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Delete auto-response
+  app.delete('/api/auto-responses/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteAutoResponse(id);
+      res.json({ success: true });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Delete auto-response error: ${errorMessage}`);
+      res.status(400).json({ success: false, error: errorMessage });
+    }
+  });
+
+  // Get recent incoming messages
+  app.get('/api/incoming-messages', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await storage.getMessages({
+        type: 'incoming',
+        limit,
+      });
+      res.json(messages);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`Get incoming messages error: ${errorMessage}`);
       res.status(400).json({ success: false, error: errorMessage });
     }
   });

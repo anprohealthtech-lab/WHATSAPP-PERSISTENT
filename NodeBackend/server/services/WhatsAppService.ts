@@ -105,13 +105,17 @@ export class WhatsAppService extends EventEmitter {
         }
       });
 
-      // Listen for interactive message responses (quick reply buttons)
+      // Listen for incoming messages (quick reply buttons, text, etc.)
       this.socket.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message) return;
 
         const from = msg.key.remoteJid;
         const phoneNumber = from?.replace('@s.whatsapp.net', '');
+        const isFromMe = msg.key.fromMe;
+
+        // Only process incoming messages (not sent by us)
+        if (isFromMe) return;
 
         // Handle interactive quick reply responses
         if (msg.message.interactiveResponseMessage) {
@@ -127,23 +131,37 @@ export class WhatsAppService extends EventEmitter {
             phoneNumber,
             timestamp: Date.now(),
           });
+          return;
         }
 
-        // Handle text-based "STOP" replies
+        // Handle text-based messages
         const messageText = msg.message.conversation || 
                            msg.message.extendedTextMessage?.text || 
                            '';
         
-        if (messageText.trim().toUpperCase() === 'STOP') {
-          console.log('📱 STOP message received from:', phoneNumber);
-          
-          // Emit event for STOP request
-          this.emit('button-clicked', {
-            buttonId: 'STOP_MESSAGES',
-            from,
+        if (messageText) {
+          console.log(`📨 Incoming message from ${phoneNumber}: ${messageText}`);
+
+          // Emit incoming message event
+          this.emit('incoming-message', {
             phoneNumber,
+            content: messageText,
+            from,
             timestamp: Date.now(),
           });
+
+          // Handle STOP command
+          if (messageText.trim().toUpperCase() === 'STOP') {
+            console.log('📱 STOP message received from:', phoneNumber);
+            
+            // Emit event for STOP request
+            this.emit('button-clicked', {
+              buttonId: 'STOP_MESSAGES',
+              from,
+              phoneNumber,
+              timestamp: Date.now(),
+            });
+          }
         }
       });
 
