@@ -110,11 +110,13 @@ export class WhatsAppService extends EventEmitter {
         const msg = messages[0];
         if (!msg.message) return;
 
+        const from = msg.key.remoteJid;
+        const phoneNumber = from?.replace('@s.whatsapp.net', '');
+
         // Handle interactive quick reply responses
         if (msg.message.interactiveResponseMessage) {
           const res = msg.message.interactiveResponseMessage.nativeFlowResponseMessage;
           const buttonId = res?.paramsJson ? JSON.parse(res.paramsJson)?.id : null;
-          const from = msg.key.remoteJid;
 
           console.log('📱 Quick Reply Button Clicked:', buttonId, 'from', from);
 
@@ -122,7 +124,24 @@ export class WhatsAppService extends EventEmitter {
           this.emit('button-clicked', {
             buttonId,
             from,
-            phoneNumber: from?.replace('@s.whatsapp.net', ''),
+            phoneNumber,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Handle text-based "STOP" replies
+        const messageText = msg.message.conversation || 
+                           msg.message.extendedTextMessage?.text || 
+                           '';
+        
+        if (messageText.trim().toUpperCase() === 'STOP') {
+          console.log('📱 STOP message received from:', phoneNumber);
+          
+          // Emit event for STOP request
+          this.emit('button-clicked', {
+            buttonId: 'STOP_MESSAGES',
+            from,
+            phoneNumber,
             timestamp: Date.now(),
           });
         }
@@ -169,75 +188,11 @@ export class WhatsAppService extends EventEmitter {
 
     const jid = `${this.formatPhoneNumber(phoneNumber)}@s.whatsapp.net`;
 
-    // If includeStopButton is true, send interactive message with quick reply
-    if (includeStopButton) {
-      try {
-        const interactiveButtons: any[] = [];
-
-        // Add URL/Call buttons if provided
-        for (const btn of buttons) {
-          if (btn.url) {
-            interactiveButtons.push({
-              name: 'cta_url',
-              buttonParamsJson: JSON.stringify({
-                display_text: btn.text,
-                url: btn.url,
-              })
-            });
-          } else if (btn.phoneNumber) {
-            interactiveButtons.push({
-              name: 'cta_call',
-              buttonParamsJson: JSON.stringify({
-                display_text: btn.text,
-                phone_number: btn.phoneNumber,
-              })
-            });
-          }
-        }
-
-        // Always add the "Stop Messages" quick reply button
-        interactiveButtons.push({
-          name: 'quick_reply',
-          buttonParamsJson: JSON.stringify({
-            display_text: '🚫 Stop Receiving Messages',
-            id: 'STOP_MESSAGES'
-          })
-        });
-
-        const result = await this.socket.sendMessage(jid, {
-          interactiveMessage: {
-            body: { text: message },
-            footer: { text: 'Reply STOP to unsubscribe' },
-            nativeFlowMessage: {
-              buttons: interactiveButtons,
-              messageParamsJson: ''
-            }
-          }
-        });
-
-        this.status.lastSeen = new Date();
-        this.emit('message-sent', {
-          messageId: result?.key?.id,
-          to: jid,
-          timestamp: Date.now(),
-        });
-
-        return {
-          id: result?.key?.id,
-          to: jid,
-          body: message,
-          hasButtons: true,
-          timestamp: Date.now(),
-        };
-      } catch (error) {
-        console.error('Failed to send interactive message, falling back to text:', error);
-        // Fallback to text message with buttons
-      }
-    }
-
-    // Fallback: Append buttons as clickable links at the end of message
+    // Baileys v6.x doesn't fully support new interactive message format yet
+    // Using text fallback with clear formatting for better compatibility
     let fullMessage = message + '\n\n';
     
+    // Add buttons as clickable links
     for (const btn of buttons) {
       if (btn.url) {
         fullMessage += `🔗 ${btn.text}: ${btn.url}\n`;
@@ -248,8 +203,11 @@ export class WhatsAppService extends EventEmitter {
       }
     }
 
+    // Add stop message option
     if (includeStopButton) {
-      fullMessage += '\n🚫 Reply "STOP" to stop receiving messages';
+      fullMessage += '\n━━━━━━━━━━━━━━━━━━━━\n';
+      fullMessage += '🚫 *To stop receiving messages*\n';
+      fullMessage += 'Reply with: *STOP*\n';
     }
 
     // Use regular text message - URLs are auto-clickable in WhatsApp
