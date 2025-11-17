@@ -58,6 +58,8 @@ export function CampaignMessageVariationPanel({
   const [newCampaignName, setNewCampaignName] = useState('');
   const [originalMessage, setOriginalMessage] = useState('');
   const [fixedParams, setFixedParams] = useState<Record<string, string>>({});
+  const [buttons, setButtons] = useState<Array<{ text: string; url?: string }>>([]);
+  const [showButtons, setShowButtons] = useState(false);
 
   // Extract placeholders from message
   const extractPlaceholders = (message: string): string[] => {
@@ -80,6 +82,23 @@ export function CampaignMessageVariationPanel({
       ...prev,
       [key]: value
     }));
+  };
+
+  // Add/remove/update buttons
+  const addButton = () => {
+    setButtons(prev => [...prev, { text: '', url: '' }]);
+  };
+
+  const updateButton = (index: number, field: 'text' | 'url', value: string) => {
+    setButtons(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const removeButton = (index: number) => {
+    setButtons(prev => prev.filter((_, i) => i !== index));
   };
 
   // Get placeholders from current message
@@ -145,7 +164,8 @@ export function CampaignMessageVariationPanel({
         body: JSON.stringify({
           name: newCampaignName,
           originalMessage,
-          fixedParams: fixedParams,
+          fixedParams,
+          buttons: buttons.filter(b => b.text.trim() !== ''), // Only send non-empty buttons
         }),
       });
 
@@ -358,6 +378,67 @@ export function CampaignMessageVariationPanel({
               ))}
             </div>
           )}
+
+          {/* Button Configuration Section */}
+          <div className="space-y-4 border rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-base font-semibold">Interactive Buttons (Optional)</Label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Add clickable links to reduce spam reports and boost engagement
+                </p>
+              </div>
+              <Button
+                variant={showButtons ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowButtons(!showButtons)}
+              >
+                {showButtons ? 'Hide' : 'Show'} Buttons
+              </Button>
+            </div>
+
+            {showButtons && (
+              <div className="space-y-4 mt-4">
+                {buttons.map((button, index) => (
+                  <div key={index} className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor={`btn-text-${index}`}>Button Text</Label>
+                      <Input
+                        id={`btn-text-${index}`}
+                        value={button.text}
+                        onChange={(e) => updateButton(index, 'text', e.target.value)}
+                        placeholder="e.g., Visit Website"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor={`btn-url-${index}`}>URL (optional)</Label>
+                      <Input
+                        id={`btn-url-${index}`}
+                        value={button.url || ''}
+                        onChange={(e) => updateButton(index, 'url', e.target.value)}
+                        placeholder="https://example.com"
+                      />
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => removeButton(index)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="outline" onClick={addButton} className="w-full">
+                  + Add Button
+                </Button>
+                <Alert>
+                  <AlertDescription className="text-xs">
+                    💡 <strong>Tip:</strong> Add a "Visit Website" button or "This is helpful" to encourage positive interaction and reduce spam reports.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+          </div>
 
           <Button onClick={createCampaign} className="w-full">
             Create Campaign

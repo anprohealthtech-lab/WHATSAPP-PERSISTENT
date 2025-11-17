@@ -134,6 +134,32 @@ export class WhatsAppService extends EventEmitter {
     };
   }
 
+  async sendMessageWithButtons(
+    phoneNumber: string, 
+    message: string, 
+    buttons: Array<{ text: string; url?: string; phoneNumber?: string }>
+  ): Promise<any> {
+    if (!this.socket || !this.status.isConnected) {
+      throw new Error('WhatsApp not connected');
+    }
+
+    // Append buttons as clickable links at the end of message
+    let fullMessage = message + '\n\n';
+    
+    for (const btn of buttons) {
+      if (btn.url) {
+        fullMessage += `🔗 ${btn.text}: ${btn.url}\n`;
+      } else if (btn.phoneNumber) {
+        fullMessage += `📞 ${btn.text}: ${btn.phoneNumber}\n`;
+      } else {
+        fullMessage += `✅ ${btn.text}\n`;
+      }
+    }
+
+    // Use regular text message - URLs are auto-clickable in WhatsApp
+    return this.sendTextMessage(phoneNumber, fullMessage.trim());
+  }
+
   async sendMediaMessage(phoneNumber: string, filePath: string, caption?: string): Promise<any> {
     if (!this.socket || !this.status.isConnected) {
       throw new Error('WhatsApp not connected');

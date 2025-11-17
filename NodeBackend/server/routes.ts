@@ -435,7 +435,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const campaign = await campaignService.createCampaign(
         validatedData.name,
         validatedData.originalMessage,
-        validatedData.fixedParams
+        validatedData.fixedParams,
+        validatedData.buttons
       );
 
       res.json({ success: true, data: campaign });

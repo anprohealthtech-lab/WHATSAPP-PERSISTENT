@@ -39,6 +39,7 @@ export const campaigns = pgTable("campaigns", {
   originalMessage: text("original_message").notNull(),
   fixedParams: jsonb("fixed_params"),
   selectedVariation: text("selected_variation"),
+  buttons: jsonb("buttons"), // Array of { text: string; url?: string; phoneNumber?: string }
   totalContacts: integer("total_contacts").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -109,6 +110,11 @@ export const createCampaignSchema = z.object({
   name: z.string().min(1, "Campaign name is required"),
   originalMessage: z.string().min(1, "Original message is required"),
   fixedParams: z.record(z.any()).optional(),
+  buttons: z.array(z.object({
+    text: z.string(),
+    url: z.string().optional(),
+    phoneNumber: z.string().optional(),
+  })).optional(),
 });
 
 export const bulkSendSchema = z.object({

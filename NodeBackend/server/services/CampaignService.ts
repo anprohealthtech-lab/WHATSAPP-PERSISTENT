@@ -23,11 +23,17 @@ interface BulkSendResult {
 
 export class CampaignService {
   
-  async createCampaign(name: string, originalMessage: string, fixedParams?: Record<string, any>) {
+  async createCampaign(
+    name: string, 
+    originalMessage: string, 
+    fixedParams?: Record<string, any>,
+    buttons?: Array<{ text: string; url?: string; phoneNumber?: string }>
+  ) {
     const [campaign] = await db.insert(campaigns).values({
       name,
       originalMessage,
       fixedParams: fixedParams || {},
+      buttons: buttons || [],
     }).returning();
     
     return campaign;
@@ -230,8 +236,12 @@ export class CampaignService {
 
         log(`  ↪ Sending personalized message...`);
         
-        // Send via WhatsApp service
-        await whatsAppService.sendTextMessage(contact.phone, personalizedMessage);
+        // Send via WhatsApp service (with buttons if configured)
+        if (campaign.buttons && Array.isArray(campaign.buttons) && campaign.buttons.length > 0) {
+          await whatsAppService.sendMessageWithButtons(contact.phone, personalizedMessage, campaign.buttons);
+        } else {
+          await whatsAppService.sendTextMessage(contact.phone, personalizedMessage);
+        }
         
         // Update recipient status
         await db
