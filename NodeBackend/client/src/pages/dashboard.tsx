@@ -928,6 +928,8 @@ export default function Dashboard() {
             </Card>
           )}
         </main>
+      </div>
+
       {/* QR Code Modal */}
       <Dialog open={showQRModal} onOpenChange={setShowQRModal}>
         <DialogContent className="max-w-md">
