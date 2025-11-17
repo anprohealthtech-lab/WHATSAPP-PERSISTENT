@@ -12,6 +12,8 @@ import { campaignService } from "./services/CampaignService";
 import { autoResponseService } from "./services/AutoResponseService";
 import { sendMessageSchema, sendReportSchema, createCampaignSchema, bulkSendSchema } from "@shared/schema";
 import { log } from "./utils";
+import { getDbHealth } from "./db";
+import { withRetry } from "./dbRetry";
 import * as XLSX from 'xlsx';
 
 // Configure CORS
@@ -148,18 +150,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('📥 Incoming message received:', data);
       
       try {
-        // Save incoming message to database
-        await storage.createMessage({
+        // Save incoming message to database with retry
+        await withRetry(() => storage.createMessage({
           phoneNumber: data.phoneNumber,
           content: data.content,
           type: 'incoming',
           status: 'received',
-        });
+        }));
 
-        // Check and trigger auto-responses
-        const responded = await autoResponseService.handleIncomingMessage(
-          data.phoneNumber,
-          data.content
+        // Check and trigger auto-responses with retry
+        const responded = await withRetry(() => 
+          autoResponseService.handleIncomingMessage(
+            data.phoneNumber,
+            data.content
+          )
         );
 
         if (responded) {
@@ -245,14 +249,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Health check endpoint for DigitalOcean
-  app.get('/api/health', (req, res) => {
-    res.status(200).json({ 
-      success: true, 
+  // Health check endpoint for DigitalOcean with DB verification
+  app.get('/api/health', async (req, res) => {
+    const startTime = Date.now();
+    const dbHealthy = await getDbHealth();
+    const dbLatency = Date.now() - startTime;
+    
+    const health = {
+      success: true,
       message: 'Server is running',
       timestamp: new Date().toISOString(),
-      uptime: process.uptime()
-    });
+      uptime: process.uptime(),
+      database: {
+        connected: dbHealthy,
+        latency: `${dbLatency}ms`
+      }
+    };
+
+    // Return 503 if DB is down so load balancer can route away
+    res.status(dbHealthy ? 200 : 503).json(health);
   });
 
   // Get system status
@@ -485,13 +500,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/campaigns', async (req, res) => {
     try {
       const validatedData = createCampaignSchema.parse(req.body);
-      const campaign = await campaignService.createCampaign(
+      const campaign = await withRetry(() => campaignService.createCampaign(
         validatedData.name,
         validatedData.originalMessage,
         validatedData.fixedParams,
         validatedData.buttons,
         validatedData.includeStopButton
-      );
+      ));
 
       res.json({ success: true, data: campaign });
     } catch (error) {
@@ -748,7 +763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all auto-responses (including inactive)
   app.get('/api/auto-responses/all', async (req, res) => {
     try {
-      const autoResponses = await storage.getAllAutoResponses();
+      const autoResponses = await withRetry(() => storage.getAllAutoResponses());
       res.json(autoResponses);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -772,11 +787,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const autoResponse = await storage.createAutoResponse({
+      const autoResponse = await withRetry(() => storage.createAutoResponse({
         keyword,
         response,
         isActive: isActive !== false, // Default to true
-      });
+      }));
 
       res.json({ success: true, autoResponse });
     } catch (error) {
@@ -795,11 +810,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { keyword, response, isActive } = req.body;
 
-      const autoResponse = await storage.updateAutoResponse(id, {
+      const autoResponse = await withRetry(() => storage.updateAutoResponse(id, {
         keyword,
         response,
         isActive,
-      });
+      }));
 
       if (!autoResponse) {
         return res.status(404).json({ 
@@ -820,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/auto-responses/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      await storage.deleteAutoResponse(id);
+      await withRetry(() => storage.deleteAutoResponse(id));
       res.json({ success: true });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -833,10 +848,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/incoming-messages', async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
-      const messages = await storage.getMessages({
+      const messages = await withRetry(() => storage.getMessages({
         type: 'incoming',
         limit,
-      });
+      }));
       res.json(messages);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
