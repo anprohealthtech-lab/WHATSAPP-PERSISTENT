@@ -83,26 +83,26 @@ export class WhatsAppService extends EventEmitter {
           this.emit('whatsapp-authenticated', { status: this.status });
         } else if (connection === 'close') {
           console.log('❌ Baileys connection closed');
-          const disconnectReason = (lastDisconnect?.error as Boom)?.output?.statusCode;
-          console.log(`🔍 Disconnect reason: ${disconnectReason} (${DisconnectReason[disconnectReason] || 'unknown'})`);
+          const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+          console.log(`🔍 Disconnect reason: ${statusCode} (${DisconnectReason[statusCode] || 'unknown'})`);
           
           this.status.isConnected = false;
           this.status.isAuthenticated = false;
           
-          const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          // Only reconnect for network issues, not for logout or manual disconnect
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut 
+            && statusCode !== DisconnectReason.connectionClosed
+            && statusCode !== undefined; // Don't reconnect on undefined (manual disconnect)
           
-          console.log(`🔍 Disconnect reason: ${statusCode} (${DisconnectReason[statusCode] || 'unknown'})`);
-          
-          if (shouldReconnect && statusCode !== DisconnectReason.connectionClosed) {
-            console.log('🔄 Reconnecting in 5 seconds...');
-            setTimeout(() => this.initialize(), 5000);
+          if (shouldReconnect) {
+            console.log('🔄 Reconnecting in 30 seconds...');
+            setTimeout(() => this.initialize(), 30000); // 30 seconds delay
           } else {
             console.log('🚪 Logged out or connection closed - clearing auth and need new QR scan');
             // Clear auth state when logged out
             await this.clearAuthState();
             this.currentQR = null;
-            this.emit('whatsapp-auth-failure', { error: 'Logged out' });
+            this.emit('whatsapp-auth-failure', { error: 'Logged out or disconnected' });
           }
         } else if (connection === 'connecting') {
           console.log('🔄 Baileys connecting...');
@@ -276,15 +276,22 @@ export class WhatsAppService extends EventEmitter {
   async generateQRCode(): Promise<void> {
     console.log('🔄 QR generation requested');
     
-    if (this.status.isConnected) {
-      throw new Error('WhatsApp is already connected');
+    // Always disconnect and clean up before generating new QR
+    // This ensures old connections don't interfere
+    if (this.socket) {
+      console.log('🔌 Disconnecting existing connection before generating QR...');
+      try {
+        await this.socket.logout();
+      } catch (error) {
+        console.log('⚠️ Error during logout (ignoring):', error instanceof Error ? error.message : 'Unknown');
+      }
     }
     
     // Clean up existing connection and clear auth state
     await this.cleanup();
     await this.clearAuthState();
     
-    console.log('🔄 No current QR, initializing fresh connection...');
+    console.log('🔄 Starting fresh connection for QR generation...');
     await this.initialize();
   }
 
