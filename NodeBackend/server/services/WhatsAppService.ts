@@ -63,7 +63,7 @@ export class WhatsAppService extends EventEmitter {
 
       this.socket.ev.on('creds.update', saveCreds);
 
-      this.socket.ev.on('connection.update', (update: any) => {
+      this.socket.ev.on('connection.update', async (update: any) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -83,6 +83,9 @@ export class WhatsAppService extends EventEmitter {
           this.emit('whatsapp-authenticated', { status: this.status });
         } else if (connection === 'close') {
           console.log('❌ Baileys connection closed');
+          const disconnectReason = (lastDisconnect?.error as Boom)?.output?.statusCode;
+          console.log(`🔍 Disconnect reason: ${disconnectReason} (${DisconnectReason[disconnectReason] || 'unknown'})`);
+          
           this.status.isConnected = false;
           this.status.isAuthenticated = false;
           
@@ -96,7 +99,8 @@ export class WhatsAppService extends EventEmitter {
             setTimeout(() => this.initialize(), 5000);
           } else {
             console.log('🚪 Logged out or connection closed - clearing auth and need new QR scan');
-            // Clear current QR and auth state
+            // Clear auth state when logged out
+            await this.clearAuthState();
             this.currentQR = null;
             this.emit('whatsapp-auth-failure', { error: 'Logged out' });
           }
@@ -276,15 +280,16 @@ export class WhatsAppService extends EventEmitter {
       throw new Error('WhatsApp is already connected');
     }
     
-    if (this.currentQR) {
-      console.log('✅ QR already available, emitting existing QR');
-      this.emit('qr-code', { qr: this.currentQR, rawQR: this.currentQR });
-      return;
-    }
+    // Clean up existing connection and clear auth state
+    await this.cleanup();
+    await this.clearAuthState();
     
+<<<<<<< HEAD
     // Clean up any existing connection first
     await this.cleanup();
     
+=======
+>>>>>>> 8aebd05 (Fix: Clear auth state when logged out (401) to enable fresh QR generation)
     console.log('🔄 No current QR, initializing fresh connection...');
     await this.initialize();
   }
@@ -353,6 +358,21 @@ export class WhatsAppService extends EventEmitter {
     };
     
     this.currentQR = null;
+  }
+
+  private async clearAuthState(): Promise<void> {
+    try {
+      console.log('🗑️ Clearing old auth state...');
+      if (fs.existsSync(this.authPath)) {
+        const files = fs.readdirSync(this.authPath);
+        for (const file of files) {
+          fs.unlinkSync(path.join(this.authPath, file));
+        }
+        console.log('✅ Auth state cleared successfully');
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to clear auth state:', error);
+    }
   }
 }
 
