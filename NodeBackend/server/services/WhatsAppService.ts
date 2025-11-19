@@ -284,12 +284,6 @@ export class WhatsAppService extends EventEmitter {
     await this.cleanup();
     await this.clearAuthState();
     
-<<<<<<< HEAD
-    // Clean up any existing connection first
-    await this.cleanup();
-    
-=======
->>>>>>> 8aebd05 (Fix: Clear auth state when logged out (401) to enable fresh QR generation)
     console.log('🔄 No current QR, initializing fresh connection...');
     await this.initialize();
   }
